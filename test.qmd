@@ -1,0 +1,237 @@
+---
+title: "Simulation"
+output: 
+  html_document:
+    toc:  true
+    toc_float: true
+---
+
+Below we simulate data from the vector autoregressive model (VAR) of order-1 as illustrated in Figure 1 of the main manuscript. This data is used to double check if the CLPM in SEM, the repeated multiple regression method, and the SNMM with G-estimation method were correctly implemented in the R code. Furthermore, the simulations were used to assess the sensitivity of model results to different sufficient adjustment sets. 
+
+::: {.callout-note}
+These simulations were not mentioned in the main paper, and mainly served as a check for the authors. However, we do include them in the supplementary materials, as readers main find it useful to use these simulation for obtaining some intuition of the methods.
+:::
+
+# Data generating mechanism
+Data are generated from a the vector autoregressive model (VAR) of order-1 as illustrated in Figure 1 of the main manuscript. The relationships between variables are described by polynomials of degree $k$, and the residuals are normally distributed. Baseline covariates $C$ are binomial random variables. 
+
+Population parameter values for the separate relationships can be found in the R code below. For a linear data generating mechanism ($k = 1$), the population parameter values of the controlled direct effect (CDE) of $X_{0} \rightarrow Y_{3}$ is 0.05; the CDE of $X_{1} \rightarrow Y_{3}$ is 0.1; and the CDE of $X_{2} \rightarrow Y_{3}$ is 0.2. 
+
+```{.r}
+simulate_data_test <- function(n) {
+  # Simulation factors
+  kth_bX <- 0
+  kth_bY <- 0
+  
+  # Baseline variables
+  C1_b <- rbinom(n, 1, .5)
+  C2_b <- rbinom(n, 1, .1)
+  C3_b <-rbinom(n, 1, .4)
+    
+  Y_b <- rnorm(n, 5, .5)
+  X_b <- rnorm(n, 5, .5)
+  
+  # Stationary process
+  Y_0 <- 3 + 0.5 * Y_b + 0.2 * X_b + 0.5 * C1_b +
+    0.5 * I((Y_b - mean(Y_b))^kth_bY) + 1 * I((X_b - mean(X_b))^kth_bX) + rnorm(n, sd = .5)
+  X_0 <- 3 + 0.2 * Y_b + 0.5 * X_b + 0.5 * C1_b + rnorm(n, sd = .5) 
+  
+  Y_1 <- 3 + 0.5 * Y_0 + 0.2 * X_0 + 0.5 * C1_b +
+    0.5 * I((Y_0 - mean(Y_0))^kth_bY) + 1 * I((X_0 - mean(X_0))^kth_bX) + rnorm(n, sd = .5)
+  X_1 <- 3 + 0.2 * Y_0 + 0.5 * X_0 + 0.5 * C1_b + rnorm(n, sd = .5) 
+  
+  Y_2 <- 3 + 0.5 * Y_1 + 0.2 * X_1 + 0.5 * C1_b +
+    0.5 * I((Y_1 - mean(Y_1))^kth_bY) + 1 * I((X_1 - mean(X_1))^kth_bX) + rnorm(n, sd = .5)
+  X_2 <- 3 + 0.2 * Y_1 + 0.5 * X_1 + 0.5 * C1_b + rnorm(n, sd = .5) 
+  
+  Y_3 <- 3 + 0.5 * Y_2 + 0.2 * X_2 + 0.5 * C1_b +
+    0.5 * I((Y_2 - mean(Y_2))^kth_bY) + 1 * I((X_2 - mean(X_2))^kth_bX) + rnorm(n, sd = .5)
+  X_3 <- 3 + 0.2 * Y_2 + 0.5 * X_2 + 0.5 * C1_b + rnorm(n, sd = .5) 
+  
+  plot(Y_0, X_1)
+  plot(X_1, X_2)
+  
+  dat_test <- data.frame(
+    C1_b, C2_b, C3_b, X_b, Y_b,
+    X_0, Y_0,
+    X_1, Y_1, 
+    X_2, Y_2,
+    X_3, Y_3
+  )
+  
+  return(dat_test)
+}
+```
+
+
+# Cross-lagged panel modeling using SEM
+
+
+```{.r}
+m_CLPM_test <- '
+  # Estimate lagged effects
+  X_1 ~ X_0 + Y_0 + C1_b
+  Y_1 ~ Y_0 + b_y1x0*X_0 + C1_b
+  
+  X_2 ~ X_1 + Y_1 + C1_b
+  Y_2 ~ b_y2x1*X_1 + b_y2y1*Y_1 + C1_b
+   
+  X_3 ~ X_2 + Y_2 + C1_b
+  Y_3 ~ b_y3x2*X_2 + b_y3y2*Y_2 + C1_b
+
+  # Estimate (co)variance at first wave
+  X_0 ~~ X_0
+  Y_0 ~~ Y_0
+  X_0 ~~ Y_0
+  
+  # Estimate residual (co)variances 
+  X_1 ~~ X_1
+  Y_1 ~~ Y_1
+  X_1 ~~ Y_1
+  
+  X_2 ~~ X_2
+  Y_2 ~~ Y_2
+  X_2 ~~ Y_2
+  
+  X_3 ~~ X_3
+  Y_3 ~~ Y_3
+  X_3 ~~ Y_3
+  
+  # Define joint effects
+  CDE_0 := b_y1x0 * b_y2y1 * b_y3y2 
+  CDE_1 := b_y2x1 * b_y3y2
+  CDE_2 := b_y3x2
+'
+
+fit_CLPM_test <- lavaan(
+  model = m_CLPM_test,
+  data = dat_test, 
+  missing = "ML", 
+  meanstructure = TRUE, 
+  int.ov.free = TRUE,
+  orthogonal.x = FALSE,
+  se = "bootstrap", 
+  bootstrap = 99,
+  parallel = "snow", 
+  ncpus = 7
+)
+summary(fit_CLPM_test)
+parameterEstimates(fit_CLPM_test, boot.ci.type = "perc")
+```
+
+# Repeated multiple regression
+
+```{.r}
+# Test multiple regression method with L_{t} in adjustment set----
+n_replications <- 500
+
+out_test_MR_Lt <- matrix(NA, nrow = n_replications, ncol = 3)
+colnames(out_test_MR_Lt) <- c("CDE0", "CDE1", "CDE2")
+
+for(i in 1:n_replications) {
+  dat_test <- simulate_data_test(1000)
+  
+  fit_CDE2_test_Lt <- glm(Y_3 ~ X_2 + Y_2 + C1_b, data = dat_test)
+  fit_CDE1_test_Lt <- glm(Y_3 ~ X_1 + Y_1 + C1_b + X_2, data = dat_test)
+  fit_CDE0_test_Lt <- glm(Y_3 ~ X_0 + Y_0 + C1_b + X_1 + X_2, data = dat_test)
+  
+  out_test_MR_Lt[i, "CDE0"] <- coef(fit_CDE0_test_Lt)["X_0"]
+  out_test_MR_Lt[i, "CDE1"] <- coef(fit_CDE1_test_Lt)["X_1"]
+  out_test_MR_Lt[i, "CDE2"] <- coef(fit_CDE2_test_Lt)["X_2"]
+}
+
+colMeans(out_test_MR_Lt) 
+
+# Test multiple regression method with L_{t - 1} in adjustment set----
+out_test_MR_Ltmin1 <- matrix(NA, nrow = n_replications, ncol = 3)
+colnames(out_test_MR_Ltmin1) <- c("CDE0", "CDE1", "CDE2")
+
+for(i in 1:n_replications) {
+  dat_test <- simulate_data_test(1000)
+  
+  fit_CDE2_test_Ltmin1 <- glm(Y_3 ~ X_2 + X_1 + Y_1 + C1_b, data = dat_test)
+  fit_CDE1_test_Ltmin1 <- glm(Y_3 ~ X_1 + X_0 + Y_0 + C1_b + X_2, data = dat_test)
+  fit_CDE0_test_Ltmin1 <- glm(Y_3 ~ X_0 + C1_b + X_1 + X_2, data = dat_test)
+  
+  out_test_MR_Ltmin1[i, "CDE0"] <- coef(fit_CDE0_test_Ltmin1)["X_0"]
+  out_test_MR_Ltmin1[i, "CDE1"] <- coef(fit_CDE1_test_Ltmin1)["X_1"]
+  out_test_MR_Ltmin1[i, "CDE2"] <- coef(fit_CDE2_test_Ltmin1)["X_2"]
+}
+
+colMeans(out_test_MR_Ltmin1) 
+```
+
+# SNMM using G-estimation
+
+```{.r}
+# Test G-estimation with L_{t} in adjustment set----
+out_test_Gest_Lt <- matrix(NA, nrow = n_replications, ncol = 3)
+colnames(out_test_Gest_Lt) <- c("CDE0", "CDE1", "CDE2")
+
+for(i in 1:n_replications) {
+  
+  # Generate data
+  dat_test <- simulate_data_test(1000)
+  
+  # Exposure models with Lag0 covariates
+  fit_PS_X2 <- glm(X_2 ~ Y_2 + C1_b, data = dat_test)
+  fit_PS_X1 <- glm(X_1 ~ Y_1 + C1_b, data = dat_test)
+  fit_PS_X0 <- glm(X_0 ~ Y_0 + C1_b, data = dat_test)
+  
+  # Calculate predicted exposure
+  dat_test$PS2 <- predict.glm(fit_PS_X2, type = "response")
+  dat_test$PS1 <- predict.glm(fit_PS_X1, type = "response")
+  dat_test$PS0 <- predict.glm(fit_PS_X0, type = "response")
+  
+  # Outcome models
+  fit_CDE2 <- glm(Y_3 ~ X_2 + Y_2 + C1_b + PS2, data = dat_test)
+  dat_test$H2 <- dat_test$Y_3 - coef(fit_CDE2)["X_2"] * dat_test$X_2 # Create blipped-down version Y
+  
+  fit_CDE1 <- glm(H2 ~ X_1 + Y_1 + C1_b + PS1, data = dat_test)
+  dat_test$H1 <- dat_test$H2 - coef(fit_CDE1)["X_1"] * dat_test$X_1 # Create blipped-down version Y
+  
+  fit_CDE0 <- glm(H1 ~ X_0 + Y_0 + C1_b + PS0, data = dat_test)
+                    
+  out_test_Gest_Lt[i, "CDE0"] <- coef(fit_CDE0)["X_0"]
+  out_test_Gest_Lt[i, "CDE1"] <- coef(fit_CDE1)["X_1"]
+  out_test_Gest_Lt[i, "CDE2"] <- coef(fit_CDE2)["X_2"]
+}
+
+colMeans(out_test_Gest_Lt)
+
+# Test G-estimation with L_{t - 1} in adjustment set----
+out_test_Gest_Ltmin1 <- matrix(NA, nrow = n_replications, ncol = 3)
+colnames(out_test_Gest_Ltmin1) <- c("CDE0", "CDE1", "CDE2")
+
+for(i in 1:n_replications) {
+  
+  # Generate data
+  dat_test <- simulate_data_test(1000)
+  
+  # Exposure models with Lag1 covariates
+  fit_PS_X2 <- glm(X_2 ~ X_1 + Y_1 + C1_b, data = dat_test )
+  fit_PS_X1 <- glm(X_1 ~ X_0 + Y_0 + C1_b, data = dat_test )
+  fit_PS_X0 <- glm(X_0 ~ C1_b, data = dat_test)
+  
+  # Calculate predicted exposure
+  dat_test$PS2 <- predict.glm(fit_PS_X2, type = "response")
+  dat_test$PS1 <- predict.glm(fit_PS_X1, type = "response")
+  dat_test$PS0 <- predict.glm(fit_PS_X0, type = "response")
+  
+  # Outcome models
+  fit_CDE2 <- glm(Y_3 ~ X_2 + X_1 + Y_1 + C1_b + PS2, data = dat_test)
+  dat_test$H2 <- dat_test$Y_3 - coef(fit_CDE2)["X_2"] * dat_test$X_2 # Create blipped-down version Y
+  
+  fit_CDE1 <- glm(H2 ~ X_1 + X_0 + Y_0 + C1_b + PS1, data = dat_test)
+  dat_test$H1 <- dat_test$H2 - coef(fit_CDE1)["X_1"] * dat_test$X_1 # Create blipped-down version Y
+  
+  fit_CDE0 <- glm(H1 ~ X_0 + C1_b + PS0, data = dat_test)
+                    
+  out_test_Gest_Ltmin1[i, "CDE0"] <- coef(fit_CDE0)["X_0"]
+  out_test_Gest_Ltmin1[i, "CDE1"] <- coef(fit_CDE1)["X_1"]
+  out_test_Gest_Ltmin1[i, "CDE2"] <- coef(fit_CDE2)["X_2"]
+}
+
+colMeans(out_test_Gest_Ltmin1)
+
+```

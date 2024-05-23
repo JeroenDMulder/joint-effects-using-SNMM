@@ -1,0 +1,47 @@
+---
+title: "Online supplementary materials Mulder, Usami, Hamaker (2024)"
+toc: false
+doi: 10.1080/10705511.2024.2355579
+author:
+  - name: Jeroen D. Mulder
+    orcid: 0000-0002-5553-0856
+    url: 
+    affiliations:
+      - Utrecht University
+  - name: Satoshi Usami
+    affiliations:
+      - Tokyo University
+  - name: Ellen L. Hamaker
+    affiliations:
+      - Utrecht University
+bibliography: references.bib
+---
+
+## Introduction
+This website is the supplementary materials to "Joint effects in cross-lagged panel research using structural nested mean models" by @mulder_joint_2024. It contains:
+
+1. fully annotated `R` code for replicating analyses from the empirical example in the main paper; 
+2. fully annotated `R` code to test if the modeling procedure in R works as intended using simulated data; and 
+3. answers to Frequently Asked Questions (FAQ) that reach us via email. 
+
+Use the top menu to navigate to [code for the empirical example](https://jeroendmulder.github.io/joint-effects-using-SNMMs/empirical-example.html), [the test code](https://jeroendmulder.github.io/joint-effects-using-SNMMs/test.html), or the [FAQ](https://jeroendmulder.github.io/joint-effects-using-SNMMs/faq.html). 
+
+## R packages
+For the analyses, we relied on functions from the following R packages: foreign (version 0.8-83) by @r_core_team_foreign_2022; dplyr (version 1.1.4) by @wickham_dplyr_2023; tidyr (version 1.3.1) by @wickham_tidyr_2024; purrr (version 1.0.2) by @wickham_purrr_2023; mice (version 3.16.0) by @van_buuren_mice_2011; ggplot2 (version 3.4.4) by @wickham_ggplot2_2016; lavaan (version 0.6.16) by @rosseel_lavaan_2012; geeM (version 0.10.1) by @mcdaniel_fast_2013; and boot (version 1.3-28) by @canty_boot_2022. They can be loaded into an R session using the below code: 
+
+```{r setup, eval=FALSE}
+# Packages: Data 
+library(foreign) # Read data stored by SPSS
+library(dplyr) # Data wrangling
+library(tidyr)
+library(purrr)
+library(mice)
+
+# Packages: Visualization
+library(ggplot2)
+
+# Packages: Analyses
+library(lavaan) # Structural equation modeling
+library(geeM) # GEE
+library(boot) # Bootstrap
+```

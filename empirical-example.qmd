@@ -1,0 +1,1589 @@
+---
+title: "Empirical example"
+format: 
+  html:
+    toc: true
+    other-links:
+      - text: "LISS data"
+        href: https://www.lissdata.nl/
+bibliography: references.bib
+---
+
+Below you can find annotated `R` code for reading in and preparing the data, and for fitting cross-lagged panel models (CLPM) in the structural equation modeling (SEM) framework, fitting repeated multiple regression models, and fitting structural nested mean models (SNMM) using the G-estimation procedure of @vansteelandt_revisiting_2016.
+
+# Preparing the data
+The data come from the Longitudinal Internet studies for the Social Sciences (LISS), and specifically from the "Health", "INCOME", "Personality", and "Social Integration and Leisure" LISS core studies (i.e., questionnaires). To gain access to the data, please see [https://www.lissdata.nl/](https://www.lissdata.nl/) [@das_true_2018]. 
+
+First, the different LISS questionnaires were read into `R` and merged together based on participant ID, `nomem_encr`. The variables of interest were selected and renamed. 
+
+```{r data-read, eval = FALSE}
+df_LISS_raw <- map(
+  .x = c(
+    "./data/cs08a_2p_EN.sav", "./data/cs09b_1p_EN.sav", 
+    "./data/cs10c_1p_EN.sav", "./data/cs11d_EN_3.0p.sav", 
+    "./data/cs12e_1.0p_EN.sav", "./data/cs13f_2.0p_EN.sav", 
+    "./data/cs14g_EN_2.0.sav", "./data/cs15h_EN_1.0p.sav",
+    "./data/cs16i_EN_1.0p.sav", "./data/cs17j_EN_1.0p.sav", 
+    "./data/cs18k_EN_1.0p.sav", "./data/cs19l_EN_1.0p.sav",
+    "./data/cs20m_EN_1.1p.sav", "./data/cs21n_EN_1.1p.sav",
+    "./data/cs22o_EN_1.1p.sav",
+    
+    "./data/ch08b_EN_1.3p.sav", "./data/ch09c_EN_1.1p.sav", 
+    "./data/ch10d_EN_1.0p.sav", "./data/ch11e_EN_1.0p.sav", 
+    "./data/ch12f_EN_1.0p.sav", "./data/ch13g_EN_1.0p.sav", 
+    "./data/ch15h_EN_1.2p.sav", "./data/ch16i_EN_1.0p.sav",
+    "./data/ch17j_EN_1.0p.sav", "./data/ch18k_EN_1.0p.sav", 
+    "./data/ch19l_EN_1.0p.sav", "./data/ch20m_EN_1.0p.sav",
+    "./data/ch21n_EN_1.0p.sav", "./data/ch22o_EN_1.0p.sav",
+         
+    "./data/cp08a_1p_EN.sav", "./data/cp09b_1.0p_EN.sav", 
+    "./data/cp10c_1.0p_EN.sav", "./data/cp11d_1.0p_EN.sav", 
+    "./data/cp12e_1.0p_EN.sav", "./data/cp13f_EN_1.0p.sav", 
+    "./data/cp14g_EN_1.0p.sav", "./data/cp15h_EN_1.0p.sav",
+    "./data/cp17i_EN_1.0p.sav", "./data/cp18j_EN_1.0p.sav", 
+    "./data/cp19k_EN_1.0p.sav", "./data/cp20l_EN_1.0p.sav",
+    "./data/cp21m_EN_1.0p.sav", "./data/cp22n_EN_1.0p.sav",
+         
+    "./data/cf08a_2p_EN.sav", "./data/cf09b_EN_2.2p.sav", 
+    "./data/cf10c_EN_1.0p.sav", "./data/cf11d_EN_1.1p.sav",
+    "./data/cf12e_EN_2.1p.sav", "./data/cf13f_EN_1.1p.sav", 
+    "./data/cf14g_EN_1.1p.sav", "./data/cf15h_EN_1.0p.sav",
+    "./data/cf16i_EN_1.0p.sav", "./data/cf17j_EN_1.0p.sav",
+    "./data/cf18k_EN_1.0p.sav", "./data/cf19l_EN_1.0p.sav",
+    "./data/cf20m_EN_1.0p.sav", "./data/cf21n_EN_1.0p.sav",
+    "./data/cf22o_EN_1.0p.sav", 
+    
+    "./data/ci08a_1.0p_EN.sav", "./data/ci09b_EN_1.1p.sav", 
+    "./data/ci10c_EN_1.0p.sav", "./data/ci11d_EN_1.0p.sav",
+    "./data/ci12e_1.0p_EN.sav", "./data/ci13f_EN_1.2p.sav", 
+    "./data/ci14g_1.0p_EN.sav", "./data/ci15h_EN_2.0p.sav",
+    "./data/ci16i_EN_3.0p.sav", "./data/ci17j_EN_3.0p.sav",
+    "./data/ci18k_EN_2.0p.sav", "./data/ci19l_EN_2.0p.sav", 
+    "./data/ci20m_EN_1.0p.sav", "./data/ci21n_EN_1.0p.sav", 
+    "./data/ci22o_EN_1.0p.sav"
+  ),
+  read.spss, 
+  use.value.labels = FALSE, 
+  to.data.frame = TRUE
+) |>
+  reduce(full_join, by = "nomem_encr") |>
+  select( # Select exposure, outcome, and covariates
+    nomem_encr, 
+    starts_with("cf") & ends_with("003"), # Gender
+    starts_with("cf") & ends_with("004"), # Age
+    
+    starts_with("cf") & ends_with("017"), # Parents address
+    starts_with("cf") & ends_with("451"), # Parents address (from 2015 survey onwards)
+    starts_with("cf") & ends_with("018"), # Father's address
+    starts_with("cf") & ends_with("019"), # Mother's address
+    starts_with("cf") & ends_with("024"), # Currently partnered?
+    starts_with("cf") & ends_with("161"), # Relationship mother (4-point)
+    starts_with("cf") & ends_with("162"), # Relationship father
+    starts_with("ci") & ends_with("006"), # Satisfaction personal financial situation (10-point)
+    
+    starts_with("cs") & ends_with("283"), # Satisfaction with social contacts
+    
+    num_range("cp08a0", 70:79), # Self-esteem
+    num_range("cp09b0", 70:79),
+    num_range("cp10c0", 70:79),
+    num_range("cp11d0", 70:79),
+    num_range("cp12e0", 70:79),
+    num_range("cp13f0", 70:79), 
+    num_range("cp14g0", 70:79), 
+    num_range("cp15h0", 70:79),
+    num_range("cp17i0", 70:79),
+    num_range("cp18j0", 70:79),
+    num_range("cp19k0", 70:79),
+    num_range("cp20l0", 70:79),
+    num_range("cp21m0", 70:79),
+    num_range("cp22n0", 70:79),
+    
+    num_range("cp08a0", c(23, 28, 33, 38, 43, 48, 53, 58, 63, 68)), # Neuroticism
+    num_range("cp09b0", c(23, 28, 33, 38, 43, 48, 53, 58, 63, 68)),
+    num_range("cp10c0", c(23, 28, 33, 38, 43, 48, 53, 58, 63, 68)),
+    num_range("cp11d0", c(23, 28, 33, 38, 43, 48, 53, 58, 63, 68)),
+    num_range("cp12e0", c(23, 28, 33, 38, 43, 48, 53, 58, 63, 68)),
+    num_range("cp13f0", c(23, 28, 33, 38, 43, 48, 53, 58, 63, 68)), 
+    num_range("cp14g0", c(23, 28, 33, 38, 43, 48, 53, 58, 63, 68)), 
+    num_range("cp15h0", c(23, 28, 33, 38, 43, 48, 53, 58, 63, 68)),
+    num_range("cp17i0", c(23, 28, 33, 38, 43, 48, 53, 58, 63, 68)),
+    num_range("cp18j0", c(23, 28, 33, 38, 43, 48, 53, 58, 63, 68)),
+    num_range("cp19k0", c(23, 28, 33, 38, 43, 48, 53, 58, 63, 68)),
+    num_range("cp20l0", c(23, 28, 33, 38, 43, 48, 53, 58, 63, 68)),
+    num_range("cp21m0", c(23, 28, 33, 38, 43, 48, 53, 58, 63, 68)),
+    num_range("cp22n0", c(23, 28, 33, 38, 43, 48, 53, 58, 63, 68)),
+    
+    starts_with("ch") & ends_with("133"), # Alcohol use (average, last 12 months)
+    starts_with("ch") & (ends_with("159") | ends_with("160") | ends_with("161") | # Drug use (past month)
+                           ends_with("162") | ends_with("163")) 
+  ) 
+
+df_LISS <- df_LISS_raw |>
+  rename(
+    ID = nomem_encr, 
+    
+    sex_08 = cf08a003, sex_09 = cf09b003, sex_10 = cf10c003, sex_11 = cf11d003,  
+      sex_12 = cf12e003, sex_13 = cf13f003, sex_14 = cf14g003, sex_15 = cf15h003,
+      sex_16 = cf16i003, sex_17 = cf17j003, sex_18 = cf18k003, sex_19 = cf19l003,
+      sex_20 = cf20m003, sex_21 = cf21n003, 
+    age_08 = cf08a004, age_09 = cf09b004, age_10 = cf10c004, age_11 = cf11d004, 
+      age_12 = cf12e004, age_13 = cf13f004, age_14 = cf14g004, age_15 = cf15h004,
+      age_16 = cf16i004, age_17 = cf17j004, age_18 = cf18k004, age_19 = cf19l004,
+      age_20 = cf20m004, age_21 = cf21n004, age_22 = cf22o004,
+    
+    pAd_08 = cf08a017, pAd_09 = cf09b017, pAd_10 = cf10c017, pAd_11 = cf11d017, 
+      pAd_12 = cf12e017, pAd_13 = cf13f017, pAd_14 = cf14g017, pAd_15 = cf15h451, # Per 2015, question number changed
+      pAd_16 = cf16i451, pAd_17 = cf17j451, pAd_18 = cf18k451, pAd_19 = cf19l451,
+      pAd_20 = cf20m451, pAd_21 = cf21n451, pAd_22 = cf22o451,
+    mAd_08 = cf08a018, mAd_09 = cf09b018, mAd_10 = cf10c018, mAd_11 = cf11d018,
+      mAd_12 = cf12e018, mAd_13 = cf13f018, mAd_14 = cf14g018, mAd_15 = cf15h018,
+      mAd_16 = cf16i018, mAd_17 = cf17j018, mAd_18 = cf18k018, mAd_19 = cf19l018,
+      mAd_20 = cf20m018, mAd_21 = cf21n018, mAd_22 = cf22o018,
+    fAd_08 = cf08a019, fAd_09 = cf09b019, fAd_10 = cf10c019, fAd_11 = cf11d019,
+      fAd_12 = cf12e019, fAd_13 = cf13f019, fAd_14 = cf14g019, fAd_15 = cf15h019,
+      fAd_16 = cf16i019, fAd_17 = cf17j019, fAd_18 = cf18k019, fAd_19 = cf19l019,
+      fAd_20 = cf20m019, fAd_21 = cf21n019, fAd_22 = cf22o019,
+    
+    SSC_08 = cs08a283, SSC_09 = cs09b283, SSC_10 = cs10c283, SSC_11 = cs11d283,
+      SSC_12 = cs12e283, SSC_13 = cs13f283, SSC_14 = cs14g283, SSC_15 = cs15h283, 
+      SSC_16 = cs16i283, SSC_17 = cs17j283, SSC_18 = cs18k283, SSC_19 = cs19l283, 
+      SSC_20 = cs20m283, SSC_21 = cs21n283, SSC_22 = cs22o283,
+    
+    SE1_08 = cp08a070, SE2_08 = cp08a071, SE3_08 = cp08a072, SE4_08 = cp08a073,
+      SE5_08 = cp08a074, SE6_08 = cp08a075, SE7_08 = cp08a076, SE8_08 = cp08a077,
+      SE9_08 = cp08a078, SE10_08 = cp08a079,
+    SE1_09 = cp09b070, SE2_09 = cp09b071, SE3_09 = cp09b072, SE4_09 = cp09b073,
+      SE5_09 = cp09b074, SE6_09 = cp09b075, SE7_09 = cp09b076, SE8_09 = cp09b077,
+      SE9_09 = cp09b078, SE10_09 = cp09b079,
+    SE1_10 = cp10c070, SE2_10 = cp10c071, SE3_10 = cp10c072, SE4_10 = cp10c073,
+      SE5_10 = cp10c074, SE6_10 = cp10c075, SE7_10 = cp10c076, SE8_10 = cp10c077,
+      SE9_10 = cp10c078, SE10_10 = cp10c079,
+    SE1_11 = cp11d070, SE2_11 = cp11d071, SE3_11 = cp11d072, SE4_11 = cp11d073,
+      SE5_11 = cp11d074, SE6_11 = cp11d075, SE7_11 = cp11d076, SE8_11 = cp11d077,
+      SE9_11 = cp11d078, SE10_11 = cp11d079,
+    SE1_12 = cp12e070, SE2_12 = cp12e071, SE3_12 = cp12e072, SE4_12 = cp12e073,
+      SE5_12 = cp12e074, SE6_12 = cp12e075, SE7_12 = cp12e076, SE8_12 = cp12e077,
+      SE9_12 = cp12e078, SE10_12 = cp12e079,
+    SE1_13 = cp13f070, SE2_13 = cp13f071, SE3_13 = cp13f072, SE4_13 = cp13f073,
+      SE5_13 = cp13f074, SE6_13 = cp13f075, SE7_13 = cp13f076, SE8_13 = cp13f077,
+      SE9_13 = cp13f078, SE10_13 = cp13f079,
+    SE1_14 = cp14g070, SE2_14 = cp14g071, SE3_14 = cp14g072, SE4_14 = cp14g073,
+      SE5_14 = cp14g074, SE6_14 = cp14g075, SE7_14 = cp14g076, SE8_14 = cp14g077,
+      SE9_14 = cp14g078, SE10_14 = cp14g079,
+    SE1_15 = cp15h070, SE2_15 = cp15h071, SE3_15 = cp15h072, SE4_15 = cp15h073,
+      SE5_15 = cp15h074, SE6_15 = cp15h075, SE7_15 = cp15h076, SE8_15 = cp15h077,
+      SE9_15 = cp15h078, SE10_15 = cp15h079,
+    SE1_17 = cp17i070, SE2_17 = cp17i071, SE3_17 = cp17i072, SE4_17 = cp17i073,
+      SE5_17 = cp17i074, SE6_17 = cp17i075, SE7_17 = cp17i076, SE8_17 = cp17i077,
+      SE9_17 = cp17i078, SE10_17 = cp17i079,
+    SE1_18 = cp18j070, SE2_18 = cp18j071, SE3_18 = cp18j072, SE4_18 = cp18j073,
+      SE5_18 = cp18j074, SE6_18 = cp18j075, SE7_18 = cp18j076, SE8_18 = cp18j077,
+      SE9_18 = cp18j078, SE10_18 = cp18j079,
+    SE1_19 = cp19k070, SE2_19 = cp19k071, SE3_19 = cp19k072, SE4_19 = cp19k073,
+      SE5_19 = cp19k074, SE6_19 = cp19k075, SE7_19 = cp19k076, SE8_19 = cp19k077,
+      SE9_19 = cp19k078, SE10_19 = cp19k079,
+    SE1_20 = cp20l070, SE2_20 = cp20l071, SE3_20 = cp20l072, SE4_20 = cp20l073,
+      SE5_20 = cp20l074, SE6_20 = cp20l075, SE7_20 = cp20l076, SE8_20 = cp20l077,
+      SE9_20 = cp20l078, SE10_20 = cp20l079,
+    SE1_21 = cp21m070, SE2_21 = cp21m071, SE3_21 = cp21m072, SE4_21 = cp21m073,
+      SE5_21 = cp21m074, SE6_21 = cp21m075, SE7_21 = cp21m076, SE8_21 = cp21m077,
+      SE9_21 = cp21m078, SE10_21 = cp21m079,
+    SE1_22 = cp22n070, SE2_22 = cp22n071, SE3_22 = cp22n072, SE4_22 = cp22n073,
+      SE5_22 = cp22n074, SE6_22 = cp22n075, SE7_22 = cp22n076, SE8_22 = cp22n077,
+      SE9_22 = cp22n078, SE10_22 = cp22n079,
+    
+    Ne1_08 = cp08a023, Ne2_08 = cp08a028, Ne3_08 = cp08a033, Ne4_08 = cp08a038,
+      Ne5_08 = cp08a043, Ne6_08 = cp08a048, Ne7_08 = cp08a053, Ne8_08 = cp08a058,
+      Ne9_08 = cp08a063, Ne10_08 = cp08a068,
+    Ne1_09 = cp09b023, Ne2_09 = cp09b028, Ne3_09 = cp09b033, Ne4_09 = cp09b038,
+      Ne5_09 = cp09b043, Ne6_09 = cp09b048, Ne7_09 = cp09b053, Ne8_09 = cp09b058,
+      Ne9_09 = cp09b063, Ne10_09 = cp09b068,
+    Ne1_10 = cp10c023, Ne2_10 = cp10c028, Ne3_10 = cp10c033, Ne4_10 = cp10c038,
+      Ne5_10 = cp10c043, Ne6_10 = cp10c048, Ne7_10 = cp10c053, Ne8_10 = cp10c058,
+      Ne9_10 = cp10c063, Ne10_10 = cp10c068,
+    Ne1_11 = cp11d023, Ne2_11 = cp11d028, Ne3_11 = cp11d033, Ne4_11 = cp11d038,
+      Ne5_11 = cp11d043, Ne6_11 = cp11d048, Ne7_11 = cp11d053, Ne8_11 = cp11d058,
+      Ne9_11 = cp11d063, Ne10_11 = cp11d068,
+    Ne1_12 = cp12e023, Ne2_12 = cp12e028, Ne3_12 = cp12e033, Ne4_12 = cp12e038,
+      Ne5_12 = cp12e043, Ne6_12 = cp12e048, Ne7_12 = cp12e053, Ne8_12 = cp12e058,
+      Ne9_12 = cp12e063, Ne10_12 = cp12e068,
+    Ne1_13 = cp13f023, Ne2_13 = cp13f028, Ne3_13 = cp13f033, Ne4_13 = cp13f038,
+      Ne5_13 = cp13f043, Ne6_13 = cp13f048, Ne7_13 = cp13f053, Ne8_13 = cp13f058,
+      Ne9_13 = cp13f063, Ne10_13 = cp13f068,
+    Ne1_14 = cp14g023, Ne2_14 = cp14g028, Ne3_14 = cp14g033, Ne4_14 = cp14g038,
+      Ne5_14 = cp14g043, Ne6_14 = cp14g048, Ne7_14 = cp14g053, Ne8_14 = cp14g058,
+      Ne9_14 = cp14g063, Ne10_14 = cp14g068,
+    Ne1_15 = cp15h023, Ne2_15 = cp15h028, Ne3_15 = cp15h033, Ne4_15 = cp15h038,
+      Ne5_15 = cp15h043, Ne6_15 = cp15h048, Ne7_15 = cp15h053, Ne8_15 = cp15h058,
+      Ne9_15 = cp15h063, Ne10_15 = cp15h068,
+    Ne1_17 = cp17i023, Ne2_17 = cp17i028, Ne3_17 = cp17i033, Ne4_17 = cp17i038,
+      Ne5_17 = cp17i043, Ne6_17 = cp17i048, Ne7_17 = cp17i053, Ne8_17 = cp17i058,
+      Ne9_17 = cp17i063, Ne10_17 = cp17i068,
+    Ne1_18 = cp18j023, Ne2_18 = cp18j028, Ne3_18 = cp18j033, Ne4_18 = cp18j038,
+      Ne5_18 = cp18j043, Ne6_18 = cp18j048, Ne7_18 = cp18j053, Ne8_18 = cp18j058,
+      Ne9_18 = cp18j063, Ne10_18 = cp18j068,
+    Ne1_19 = cp19k023, Ne2_19 = cp19k028, Ne3_19 = cp19k033, Ne4_19 = cp19k038,
+      Ne5_19 = cp19k043, Ne6_19 = cp19k048, Ne7_19 = cp19k053, Ne8_19 = cp19k058,
+      Ne9_19 = cp19k063, Ne10_19 = cp19k068,
+    Ne1_20 = cp20l023, Ne2_20 = cp20l028, Ne3_20 = cp20l033, Ne4_20 = cp20l038,
+      Ne5_20 = cp20l043, Ne6_20 = cp20l048, Ne7_20 = cp20l053, Ne8_20 = cp20l058,
+      Ne9_20 = cp20l063, Ne10_20 = cp20l068,
+    Ne1_21 = cp21m023, Ne2_21 = cp21m028, Ne3_21 = cp21m033, Ne4_21 = cp21m038,
+      Ne5_21 = cp21m043, Ne6_21 = cp21m048, Ne7_21 = cp21m053, Ne8_21 = cp21m058,
+      Ne9_21 = cp21m063, Ne10_21 = cp21m068,
+    Ne1_22 = cp22n023, Ne2_22 = cp22n028, Ne3_22 = cp22n033, Ne4_22 = cp22n038,
+      Ne5_22 = cp22n043, Ne6_22 = cp22n048, Ne7_22 = cp22n053, Ne8_22 = cp22n058,
+      Ne9_22 = cp22n063, Ne10_22 = cp22n068,
+    
+    alc_08 = ch08b133, alc_09 = ch09c133, alc_10 = ch10d133, alc_11= ch11e133, 
+      alc_12 = ch12f133, alc_13 = ch13g133, alc_15 = ch15h133, alc_16 = ch16i133,
+      alc_17 = ch17j133, alc_18 = ch18k133, alc_19 = ch19l133, alc_20 = ch20m133,
+      alc_21 = ch21n133, alc_22 = ch22o133,
+
+    mum_08 = cf08a161, mum_09 = cf09b161, mum_10 = cf10c161, mum_11= cf11d161, 
+      mum_12 = cf12e161, mum_13 = cf13f161, mum_14 = cf14g161, mum_15 = cf15h161, 
+      mum_16 = cf16i161, mum_17 = cf17j161, mum_18 = cf18k161, mum_19 = cf19l161,
+      mum_20 = cf20m161, mum_21 = cf21n161, mum_22 = cf22o161,
+    
+    dad_08 = cf08a162, dad_09 = cf09b162, dad_10 = cf10c162, dad_11= cf11d162, 
+      dad_12 = cf12e162, dad_13 = cf13f162, dad_14 = cf14g162, dad_15 = cf15h162, 
+      dad_16 = cf16i162, dad_17 = cf17j162, dad_18 = cf18k162, dad_19 = cf19l162,
+      dad_20 = cf20m162, dad_21 = cf21n162, dad_22 = cf22o162,
+    
+    part_08 = cf08a024, part_09 = cf09b024, part_10 = cf10c024, part_11 = cf11d024, 
+      part_12 = cf12e024, part_13 = cf13f024, part_14 = cf14g024, part_15 = cf15h024,
+      part_16 = cf16i024, part_17 = cf17j024, part_18 = cf18k024, part_19 = cf19l024,
+      part_20 = cf20m024, part_21 = cf21n024, part_22 = cf22o024,
+    
+    fiSa_08 = ci08a006, fiSa_09 = ci09b006, fiSa_10 = ci10c006, fiSa_11 = ci11d006, 
+      fiSa_12 = ci12e006, fiSa_13 = ci13f006, fiSa_14 = ci14g006, fiSa_15 = ci15h006,
+      fiSa_16 = ci16i006, fiSa_17 = ci17j006, fiSa_18 = ci18k006, fiSa_19 = ci19l006,
+      fiSa_20 = ci20m006, fiSa_21 = ci21n006, fiSa_22 = ci22o006,
+    
+    seda_08 = ch08b159, soft_08 = ch08b160, xtc_08 = ch08b161, hall_08 = ch08b162,
+      hard_08 = ch08b163,
+    seda_09 = ch09c159, soft_09 = ch09c160, xtc_09 = ch09c161, hall_09 = ch09c162,
+      hard_09 = ch09c163,
+    seda_10 = ch10d159, soft_10 = ch10d160, xtc_10 = ch10d161, hall_10 = ch10d162,
+      hard_10 = ch10d163,
+    seda_11 = ch11e159, soft_11 = ch11e160, xtc_11 = ch11e161, hall_11 = ch11e162,
+      hard_11 = ch11e163,
+    seda_12 = ch12f159, soft_12 = ch12f160, xtc_12 = ch12f161, hall_12 = ch12f162,
+      hard_12 = ch12f163,
+    seda_13 = ch13g159, soft_13 = ch13g160, xtc_13 = ch13g161, hall_13 = ch13g162,
+      hard_13 = ch13g163,
+    seda_15 = ch15h159, soft_15 = ch15h160, xtc_15 = ch15h161, hall_15 = ch15h162,
+      hard_15 = ch15h163,
+    seda_16 = ch16i159, soft_16 = ch16i160, xtc_16 = ch16i161, hall_16 = ch16i162,
+      hard_16 = ch16i163,
+    seda_17 = ch17j159, soft_17 = ch17j160, xtc_17 = ch17j161, hall_17 = ch17j162,
+      hard_17 = ch17j163,
+    seda_18 = ch18k159, soft_18 = ch18k160, xtc_18 = ch18k161, hall_18 = ch18k162,
+      hard_18 = ch18k163,
+    seda_19 = ch19l159, soft_19 = ch19l160, xtc_19 = ch19l161, hall_19 = ch19l162,
+      hard_19 = ch19l163,
+    seda_20 = ch20m159, soft_20 = ch20m160, xtc_20 = ch20m161, hall_20 = ch20m162,
+      hard_20 = ch20m163,
+    seda_21 = ch21n159, soft_21 = ch21n160, xtc_21 = ch21n161, hall_21 = ch21n162,
+      hard_21 = ch21n163,
+    seda_22 = ch22o159, soft_22 = ch22o160, xtc_22 = ch22o161, hall_22 = ch22o162,
+      hard_22 = ch22o163
+  ) 
+```
+
+Next, we selected those individuals that belonged to our target population, and prepared the data for analyses. This involved recoding reverse-coded items, creating mean scores for the self-esteem and neuroticism items, creating a new dummy variable for frequent drug use, and filling in missing values by single imputation. 
+
+```{r data-prepare, eval = FALSE}
+# For each enrollment year, select target population
+df_target09 <- df_LISS |> filter(
+  (pAd_08 == 4 | fAd_08 == 4 | mAd_08 == 4) &
+    (pAd_09 != 4 | fAd_09 != 4 | mAd_09 != 4)
+) |>
+  mutate(
+    time_08 = 0, time_09 = 1, time_10 = 2, time_11 = 3, time_12 = 4, 
+    time_13 = 5, time_14 = 6, time_15 = 7, time_16 = 8, time_17 = 9, 
+    time_18 = 10, time_19 = 11, time_20 = 12, time_21 = 13, time_22 = 14
+  )
+
+df_target10 <- df_LISS |> filter(
+  !ID %in% c(df_target09$ID)  & 
+    (pAd_09 == 4 | fAd_09 == 4 | mAd_09 == 4) &
+    (pAd_10 != 4 | fAd_10 != 4 | mAd_10 != 4)
+) |>
+  mutate(
+    time_08 = -1, time_09 = 0, time_10 = 1, time_11 = 2, time_12 = 3, 
+    time_13 = 4, time_14 = 5, time_15 = 6, time_16 = 7, time_17 = 8, 
+    time_18 = 9, time_19 = 10, time_20 = 11, time_21 = 12, time_22 = 13
+  )
+
+df_target11 <- df_LISS |> filter(
+  !ID %in% c(df_target09$ID, df_target10$ID) &
+    (pAd_10 == 4 | fAd_10 == 4 | mAd_10 == 4) & 
+    (pAd_11 != 4 | fAd_11 != 4 | mAd_11 != 4) 
+) |>
+  mutate(
+    time_08 = -2, time_09 = -1, time_10 = 0, time_11 = 1, time_12 = 2, 
+    time_13 = 3, time_14 = 4, time_15 = 5, time_16 = 6, time_17 = 7, 
+    time_18 = 8, time_19 = 9, time_20 = 10, time_21 = 11, time_22 = 12
+  )
+
+df_target12 <- df_LISS |> filter(
+  !ID %in% c(df_target09$ID, df_target10$ID, df_target11$ID) &
+    (pAd_11 == 4 | fAd_11 == 4 | mAd_11 == 4) & 
+    (pAd_12 != 4 | fAd_12 != 4 | mAd_12 != 4)
+) |>
+  mutate(
+    time_08 = -3, time_09 = -2, time_10 = -1, time_11 = 0, time_12 = 1, 
+    time_13 = 2, time_14 = 3, time_15 = 4, time_16 = 5, time_17 = 6, 
+    time_18 = 7, time_19 = 8, time_20 = 9, time_21 = 10, time_22 = 11
+  )
+
+df_target13 <- df_LISS |> filter(
+  !ID %in% c(df_target09$ID, df_target10$ID, df_target11$ID, df_target12$ID) &
+    (pAd_12 == 4 | fAd_12 == 4 | mAd_12 == 4) &
+    (pAd_13 != 4 | fAd_13 != 4 | mAd_13 != 4)
+) |>
+  mutate(
+    time_08 = -4, time_09 = -3, time_10 = -2, time_11 = -1, time_12 = 0, 
+    time_13 = 1, time_14 = 2, time_15 = 3, time_16 = 4, time_17 = 5, 
+    time_18 = 6, time_19 = 7, time_20 = 8, time_21 = 9, time_22 = 10
+  )
+
+df_target14 <- df_LISS |> filter(
+  !ID %in% c(df_target09$ID, df_target10$ID, df_target11$ID, df_target12$ID,
+             df_target13$ID) &
+    (pAd_13 == 4 | fAd_13 == 4 | mAd_13 == 4) &
+    (pAd_14 != 4 | fAd_14 != 4 | mAd_14 != 4) 
+) |>
+  mutate(
+    time_08 = -5, time_09 = -4, time_10 = -3, time_11 = -2, time_12 = -1, 
+    time_13 = 0, time_14 = 1, time_15 = 2, time_16 = 3, time_17 = 4, 
+    time_18 = 5, time_19 = 6, time_20 = 7, time_21 = 8, time_22 = 9
+  )
+
+df_target15 <- df_LISS |> filter(
+  !ID %in% c(df_target09$ID, df_target10$ID, df_target11$ID, df_target12$ID,
+             df_target13$ID, df_target14$ID) &
+    (pAd_14 == 4 | fAd_14 == 4 | mAd_14 == 4) &
+    (pAd_15 != 4 | fAd_15 != 4 | mAd_15 != 4)
+) |>
+  mutate(
+    time_08 = -6, time_09 = -5, time_10 = -4, time_11 = -3, time_12 = -2, 
+    time_13 = -1, time_14 = 0, time_15 = 1, time_16 = 2, time_17 = 3, 
+    time_18 = 4, time_19 = 5, time_20 = 6, time_21 = 7, time_22 = 8
+  )
+
+df_target16 <- df_LISS |> filter(
+  !ID %in% c(df_target09$ID, df_target10$ID, df_target11$ID, df_target12$ID,
+             df_target13$ID, df_target14$ID, df_target15$ID) &
+    (pAd_15 == 4 | fAd_15 == 4 | mAd_15 == 4) &
+    (pAd_16 != 4 | fAd_16 != 4 | mAd_16 != 4)
+) |>
+  mutate(
+    time_08 = -7, time_09 = -6, time_10 = -5, time_11 = -4, time_12 = -3, 
+    time_13 = -2, time_14 = -1, time_15 = 0, time_16 = 1, time_17 = 2, 
+    time_18 = 3, time_19 = 4, time_20 = 5, time_21 = 6, time_22 = 7
+  )
+
+df_target17 <- df_LISS |> filter(
+  !ID %in% c(df_target09$ID, df_target10$ID, df_target11$ID, df_target12$ID,
+             df_target13$ID, df_target14$ID, df_target15$ID, df_target16$ID) &
+    (pAd_16 == 4 | fAd_16 == 4 | mAd_16 == 4) &
+    (pAd_17 != 4 | fAd_17 != 4 | mAd_17 != 4)
+) |>
+  mutate(
+    time_08 = -8, time_09 = -7, time_10 = -6, time_11 = -5, time_12 = -4, 
+    time_13 = -3, time_14 = -2, time_15 = -1, time_16 = 0, time_17 = 1, 
+    time_18 = 2, time_19 = 3, time_20 = 4, time_21 = 5, time_22 = 6
+  )
+
+df_target18 <- df_LISS |> filter(
+  !ID %in% c(df_target09$ID, df_target10$ID, df_target11$ID, df_target12$ID,
+             df_target13$ID, df_target14$ID, df_target15$ID, df_target16$ID,
+             df_target17$ID) &
+    (pAd_17 == 4 | fAd_17 == 4 | mAd_17 == 4) &
+    (pAd_18 != 4 | fAd_18 != 4 | mAd_18 != 4)
+) |>
+  mutate(
+    time_08 = -9, time_09 = -8, time_10 = -7, time_11 = -6, time_12 = -5, 
+    time_13 = -4, time_14 = -3, time_15 = -2, time_16 = -1, time_17 = 0, 
+    time_18 = 1, time_19 = 2, time_20 = 3, time_21 = 4, time_22 = 5
+  )
+
+df_target19 <- df_LISS |> filter(
+  !ID %in% c(df_target09$ID, df_target10$ID, df_target11$ID, df_target12$ID,
+             df_target13$ID, df_target14$ID, df_target15$ID, df_target16$ID,
+             df_target17$ID, df_target18$ID) &
+    (pAd_18 == 4 | fAd_18 == 4 | mAd_18 == 4) &
+    (pAd_19 != 4 | fAd_19 != 4 | mAd_19 != 4)
+) |>
+  mutate(
+    time_08 = -10, time_09 = -9, time_10 = -8, time_11 = -7, time_12 = -6, 
+    time_13 = -5, time_14 = -4, time_15 = -3, time_16 = -2, time_17 = -1, 
+    time_18 = 0, time_19 = 1, , time_20 = 2, time_21 = 3, time_22 = 4
+  )
+
+df_target20 <- df_LISS |> filter(
+  !ID %in% c(df_target09$ID, df_target10$ID, df_target11$ID, df_target12$ID,
+             df_target13$ID, df_target14$ID, df_target15$ID, df_target16$ID,
+             df_target17$ID, df_target18$ID, df_target19$ID) &
+    (pAd_19 == 4 | fAd_19 == 4 | mAd_19 == 4) &
+    (pAd_20 != 4 | fAd_20 != 4 | mAd_20 != 4)
+) |>
+  mutate(
+    time_08 = -11, time_09 = -10, time_10 = -9, time_11 = -8, time_12 = -7, 
+    time_13 = -6, time_14 = -5, time_15 = -4, time_16 = -3, time_17 = -2, 
+    time_18 = -1, time_19 = 0, , time_20 = 1, time_21 = 2, time_22 = 3
+  )
+
+df_target21 <- df_LISS |> filter(
+  !ID %in% c(df_target09$ID, df_target10$ID, df_target11$ID, df_target12$ID,
+             df_target13$ID, df_target14$ID, df_target15$ID, df_target16$ID,
+             df_target17$ID, df_target18$ID, df_target19$ID, df_target20$ID) &
+    (pAd_20 == 4 | fAd_20 == 4 | mAd_20 == 4) &
+    (pAd_21 != 4 | fAd_21 != 4 | mAd_21 != 4)
+) |>
+  mutate(
+    time_08 = -12, time_09 = -11, time_10 = -10, time_11 = -9, time_12 = -8, 
+    time_13 = -7, time_14 = -6, time_15 = -5, time_16 = -4, time_17 = -3, 
+    time_18 = -2, time_19 = -1, , time_20 = 0, time_21 = 1, time_22 = 2
+  )
+
+df_target22 <- df_LISS |> filter(
+  !ID %in% c(df_target09$ID, df_target10$ID, df_target11$ID, df_target12$ID,
+             df_target13$ID, df_target14$ID, df_target15$ID, df_target16$ID,
+             df_target17$ID, df_target18$ID, df_target19$ID, df_target20$ID,
+             df_target21$ID) &
+    (pAd_21 == 4 | fAd_21 == 4 | mAd_21 == 4) &
+    (pAd_22 != 4 | fAd_22 != 4 | mAd_22 != 4)
+) |>
+  mutate(
+    time_08 = -13, time_09 = -12, time_10 = -11, time_11 = -10, time_12 = -9, 
+    time_13 = -8, time_14 = -7, time_15 = -6, time_16 = -5, time_17 = -4, 
+    time_18 = -3, time_19 = -2, , time_20 = -1, time_21 = 0, time_22 = 1
+  )
+
+# Create full df from target population
+df_target <- df_target09 |>
+  bind_rows(
+    df_target10, df_target11, df_target12, df_target13, df_target14, df_target15,
+    df_target16, df_target17, df_target18, df_target19, df_target20, df_target21, 
+    df_target22
+  ) |>
+  pivot_longer(
+    cols = -ID,
+    names_to = c("var", "year"),
+    names_sep = "_", 
+    names_transform = list(year = as.numeric)
+  ) |>
+  pivot_wider(values_from = value, names_from = var) |>
+  filter(time >= -1, time < 4) |>
+  mutate( # Recode reverse-coded items
+    across(
+      c("SE3", "SE5", "SE8", "SE9", "SE10"),
+      ~ dplyr::recode(., `1` = 7, `2` = 6, `3` = 5, `5` = 3, `6` = 2, `7` = 1)
+    ),
+    across(
+      c("Ne2", "Ne4"),
+      ~ dplyr::recode(., `1` = 5, `2` = 4, `4` = 2, `5` = 1)
+    )
+  ) |> 
+  arrange(ID, time) |>
+  rowwise(ID) |> # Create SE, NE, and drug factors
+  mutate(
+    fSE = mean(c_across(SE1:SE10), na.rm = TRUE),
+    fNe = mean(c_across(Ne1:Ne10), na.rm = TRUE), 
+    drug = if_else(seda > 1 | soft > 1 | xtc > 1 | hall > 1 | hard > 1, 1, 0)
+  ) |>
+  ungroup() |>
+  mutate_all(~ifelse(is.nan(.), NA, .)) |>
+  select(
+    -num_range("SE", 1:10),
+    -pAd, -mAd, -fAd,
+    -year,
+    -starts_with("Ne"),
+    -seda, -soft, -xtc, -hall, -hard
+  ) |>
+  mutate_at(c("alc"), as.ordered) |> # Assign correct measurement level
+  mutate_at(c("drug", "sex", "part"), as.factor) |>
+  mutate(
+    across(
+      "time", 
+      ~dplyr::recode(., `-1`= "b", `0` = "0", `1` = "1", `2` = "2", `3`= "3")
+    )
+  ) |>
+  pivot_wider(names_from = time, values_from = -ID) |>
+  select(
+    -num_range("age_", 0:3),
+    -num_range("sex_", 0:3),
+    -starts_with("time"), 
+    -num_range("fNe_", 0:3),
+    -num_range("mum_", 0:3),
+    -num_range("dad_", 0:3)
+  )
+
+# Visualize alcohol variable
+hist(as.numeric(df_target$alc_0))
+hist(as.numeric(df_target$alc_1))
+hist(as.numeric(df_target$alc_2))
+hist(as.numeric(df_target$alc_3))
+
+# Single imputation 
+fit_imp <- mice(df_target, ridge = 1e-05, m = 1, seed = 20240126)
+dat <- complete(fit_imp) 
+
+rm(
+  df_target09, df_target10, df_target11, df_target12, df_target13, df_target14, 
+  df_target15, df_target16, df_target17, df_target18, df_target19, df_target20,
+  df_target21, df_target22
+)
+
+```
+
+# Cross-lagged panel modeling using SEM
+
+In total, we fit four CLPMs using SEM, namely a CLPM with:
+
+- lag-1 relationships, adjusting for no covariates (*null set*);
+- lag-1 relationships, adjusting for the simple covariate adjustment set (*simple set*);
+- lag-1 and lag-2 relationships, adjusting for no covariates (*null set, lag-1-2)*); and
+- lag-1 and lag-2 relationships, adjusting for the simple covariate adjustment set (*simple set, lag-1-2)*). 
+
+Before fitting the CLPMs, the factor variables are converted to integers using the below code: 
+
+```{r CLPM-conversion, eval = FALSE}
+dat_lavaan <- dat |>
+  mutate(
+    across(starts_with("alc"), as.integer),
+    across(c("sex_b", "drug_b", "part_b"), as.integer)
+  )
+```
+
+::: {.panel-tabset}
+## *null set*
+
+```{.r}
+m_CLPM_null <- '
+  # Estimate lagged effects
+  SSC_1 ~ fSE_0 + SSC_0 
+  fSE_1 ~ fSE_0 + b_SS0_fS1*SSC_0 
+  
+  SSC_2 ~ fSE_1 + SSC_1 
+  fSE_2 ~ b_fS1_fS2*fSE_1 + b_SS1_fS2*SSC_1 
+   
+  SSC_3 ~ fSE_2 + SSC_2 
+  fSE_3 ~ b_fS2_fS3*fSE_2 + b_SS2_fS3*SSC_2 
+
+  # Estimate (co)variance at first wave
+  fSE_0 ~~ fSE_0
+  SSC_0 ~~ SSC_0
+  fSE_0 ~~ SSC_0
+  
+  # Estimate residual (co)variances 
+  fSE_1 ~~ fSE_1
+  SSC_1 ~~ SSC_1
+  fSE_1 ~~ SSC_1
+  
+  fSE_2 ~~ fSE_2
+  SSC_2 ~~ SSC_2
+  fSE_2 ~~ SSC_2
+  
+  fSE_3 ~~ fSE_3
+  SSC_3 ~~ SSC_3
+  fSE_3 ~~ SSC_3
+  
+  # Define joint effects
+  CDE_0 := b_SS0_fS1 * b_fS1_fS2 * b_fS2_fS3 
+  CDE_1 := b_SS1_fS2 * b_fS2_fS3
+  CDE_2 := b_SS2_fS3
+'
+
+fit_CLPM_null <- lavaan(
+  model = m_CLPM_null,
+  data = dat_lavaan, 
+  missing = "ML", 
+  meanstructure = TRUE, 
+  int.ov.free = TRUE,
+  orthogonal.x = FALSE,
+  se = "bootstrap", 
+  bootstrap = 999,
+  parallel = "snow", 
+  ncpus = 7
+)
+summary(fit_CLPM_null)
+inspect(fit_CLPM_null, what = "fit")
+parameterEstimates(fit_CLPM_null, boot.ci.type = "perc")
+```
+
+## *simple set*
+
+```{.r}
+m_CLPM_simple <- '
+  # Estimate lagged effects
+  SSC_1 ~ fSE_0 + SSC_0 + alc_0 + fiSa_0 + 
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b 
+  alc_1 ~ fSE_0 + b_SS0_al1*SSC_0 + alc_0 + fiSa_0 + 
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b  
+  fSE_1 ~ fSE_0 + b_SS0_fS1*SSC_0 + alc_0 + fiSa_0 + 
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b  
+  fiSa_1 ~ fSE_0 + b_SS0_fi1*SSC_0 + alc_0 + fiSa_0 + 
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b  
+  
+  SSC_2 ~ fSE_1 + SSC_1 + alc_1 + fiSa_1 + 
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b  
+  alc_2 ~ b_fS1_al2*fSE_1 + b_SS1_al2*SSC_1 + b_al1_al2*alc_1 + b_fi1_al2*fiSa_1 + 
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b  
+  fSE_2 ~ b_fS1_fS2*fSE_1 + b_SS1_fS2*SSC_1 + b_al1_fS2*alc_1 + b_fi1_fS2*fiSa_1 + 
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b 
+  fiSa_2 ~ b_fS1_fi2*fSE_1 + b_SS1_fi2*SSC_1 + b_al1_fi2*alc_1 + b_fi1_fi2*fiSa_1 + 
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b 
+    
+  SSC_3 ~ fSE_2 + SSC_2 + alc_2 + fiSa_2 + 
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b 
+  alc_3 ~ fSE_2 + SSC_2 + alc_2 + fiSa_2 + 
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b 
+  fSE_3 ~ b_fS2_fS3*fSE_2 + b_SS2_fS3*SSC_2 + b_al2_fS3*alc_2 + b_fi2_fS3*fiSa_2 + 
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b 
+  fiSa_3 ~ fSE_2 + SSC_2 + alc_2 + fiSa_2 + 
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b  
+
+  # Estimate (co)variances at baseline
+  age_b ~~ age_b
+  sex_b ~~ sex_b
+  fNe_b ~~ fNe_b
+  mum_b ~~ mum_b
+  dad_b ~~ dad_b
+  SSC_b ~~ SSC_b
+  fSE_b ~~ fSE_b
+  drug_b ~~ drug_b
+  alc_b ~~ alc_b
+  part_b ~~ part_b
+  fiSa_b ~~ fiSa_b
+  
+  fSE_0 ~~ fSE_0
+  SSC_0 ~~ SSC_0
+  alc_0 ~~ alc_0
+  fiSa_0 ~~ fiSa_0
+   
+  age_b ~~ sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b + fSE_0 + SSC_0 + fiSa_0 + alc_0
+  sex_b ~~ fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b + fSE_0 + SSC_0 + fiSa_0 + alc_0
+  fNe_b ~~ mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b + fSE_0 + SSC_0 + fiSa_0 + alc_0
+  mum_b ~~ dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b + fSE_0 + SSC_0 + fiSa_0 + alc_0
+  dad_b ~~ SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b + fSE_0 + SSC_0 + fiSa_0 + alc_0
+  SSC_b ~~ fSE_b + drug_b + alc_b + part_b + fiSa_b + fSE_0 + SSC_0 + fiSa_0 + alc_0
+  fSE_b ~~ drug_b + alc_b + part_b + fiSa_b + fSE_0 + SSC_0 + fiSa_0 + alc_0
+  drug_b ~~ alc_b + part_b + fiSa_b + fSE_0 + SSC_0 + fiSa_0 + alc_0
+  alc_b ~~ part_b + fiSa_b + fSE_0 + SSC_0 + fiSa_0 + alc_0
+  part_b ~~ fiSa_b + fSE_0 + SSC_0 + fiSa_0 + alc_0
+  fiSa_b ~~ fSE_0 + SSC_0 + fiSa_0 + alc_0
+  
+  fSE_0 ~~ SSC_0 + fiSa_0 + alc_0 
+  SSC_0 ~~ fiSa_0 + alc_0
+  fiSa_0 ~~ alc_0
+  
+  # Estimate residual (co)variances
+  fSE_1 ~~ fSE_1
+  SSC_1 ~~ SSC_1
+  alc_1 ~~ alc_1
+  fiSa_1 ~~ fiSa_1
+  
+  fSE_1 ~~ SSC_1 + alc_1 + fiSa_1
+  SSC_1 ~~ alc_1 + fiSa_1
+  alc_1 ~~ fiSa_1
+  
+  fSE_2 ~~ fSE_2
+  SSC_2 ~~ SSC_2
+  alc_2 ~~ alc_2
+  fiSa_2 ~~ fiSa_2
+  
+  fSE_2 ~~ SSC_2 + alc_2 + fiSa_2
+  SSC_2 ~~ alc_2 + fiSa_2
+  alc_2 ~~ fiSa_2
+
+  fSE_3 ~~ fSE_3
+  SSC_3 ~~ SSC_3
+  alc_3 ~~ alc_3
+  fiSa_3 ~~ fiSa_3
+  
+  fSE_3 ~~ SSC_3 + alc_3 + fiSa_3
+  SSC_3 ~~ alc_3 + fiSa_3
+  alc_3 ~~ fiSa_3
+  
+  # Define joint effects
+  CDE_0 := b_SS0_fS1 * b_fS1_fS2 * b_fS2_fS3 +
+           b_SS0_fS1 * b_fS1_al2 * b_al2_fS3 +
+           b_SS0_fS1 * b_fS1_fi2 * b_fi2_fS3 +
+
+           b_SS0_al1 * b_al1_al2 * b_al2_fS3 +
+           b_SS0_al1 * b_al1_fS2 * b_fS2_fS3 +
+           b_SS0_al1 * b_al1_fi2 * b_fi2_fS3 +
+
+           b_SS0_fi1 * b_fi1_fi2 * b_fi2_fS3 +
+           b_SS0_fi1 * b_fi1_al2 * b_al2_fS3 +
+           b_SS0_fi1 * b_fi1_fS2 * b_fS2_fS3
+
+  CDE_1 := b_SS1_fS2 * b_fS2_fS3 +
+           b_SS1_al2 * b_al2_fS3 +
+           b_SS1_fi2 * b_fi2_fS3
+
+  CDE_2 := b_SS2_fS3
+'
+
+fit_CLPM_simple <- lavaan(
+  model = m_CLPM_simple,
+  data = dat_lavaan, 
+  missing = "ML", 
+  meanstructure = TRUE, 
+  int.ov.free = TRUE,
+  se = "bootstrap", 
+  bootstrap = 999,
+  parallel = "snow", 
+  ncpus = 7
+)
+
+summary(fit_CLPM_simple)
+inspect(fit_CLPM_simple, what = "fit")
+parameterEstimates(fit_CLPM_simple, boot.ci.type = "perc")
+```
+
+## *null set, lag-1-2*
+
+```{.r}
+m_CLPM2_null <- '
+  # Estimate lagged effects
+  SSC_1 ~ fSE_0 + SSC_0 + fSE_b + SSC_b
+  fSE_1 ~ fSE_0 + b_SS0_fS1*SSC_0 + fSE_b + SSC_b
+  
+  SSC_2 ~ fSE_1 + SSC_1 + fSE_0 + SSC_0
+  fSE_2 ~ b_fS1_fS2*fSE_1 + b_SS1_fS2*SSC_1 + fSE_0 + b_SS0_fS2*SSC_0
+   
+  SSC_3 ~ fSE_2 + SSC_2 + fSE_1 + SSC_1
+  fSE_3 ~ b_fS2_fS3*fSE_2 + b_SS2_fS3*SSC_2 + b_fS1_fS3*fSE_1 + b_SS1_fS3*SSC_1
+
+  # Estimate (co)variance at first wave
+  fSE_b ~~ fSE_b
+  SSC_b ~~ SSC_b
+  
+  fSE_0 ~~ fSE_0
+  SSC_0 ~~ SSC_0
+  
+  fSE_b ~~ SSC_b + fSE_0 + SSC_0
+  SSC_b ~~ fSE_0 + SSC_0
+  fSE_0 ~~ SSC_0
+  
+  # Estimate residual (co)variances 
+  fSE_1 ~~ fSE_1
+  SSC_1 ~~ SSC_1
+  fSE_1 ~~ SSC_1
+  
+  fSE_2 ~~ fSE_2
+  SSC_2 ~~ SSC_2
+  fSE_2 ~~ SSC_2
+  
+  fSE_3 ~~ fSE_3
+  SSC_3 ~~ SSC_3
+  fSE_3 ~~ SSC_3
+  
+  # Define joint effects
+  CDE_0 := b_SS0_fS1 * b_fS1_fS2 * b_fS2_fS3 +
+           b_SS0_fS1 * b_fS1_fS3 + 
+           b_SS0_fS2 * b_fS2_fS3 
+           
+  CDE_1 := b_SS1_fS2 * b_fS2_fS3 +
+           b_SS1_fS3
+           
+  CDE_2 := b_SS2_fS3 
+'
+
+fit_CLPM2_null <- lavaan(
+  model = m_CLPM2_null,
+  data = dat_lavaan, 
+  missing = "ML", 
+  meanstructure = TRUE, 
+  int.ov.free = TRUE,
+  orthogonal.x = FALSE,
+  se = "bootstrap", 
+  bootstrap = 999,
+  parallel = "snow", 
+  ncpus = 7
+)
+summary(fit_CLPM2_null)
+inspect(fit_CLPM2_null, what = "fit")
+parameterEstimates(fit_CLPM2_null, boot.ci.type = "perc")
+```
+
+
+## *simple set, lag-1-2*
+
+```{.r}
+m_CLPM2_simple <- '
+  # Estimate lagged effects
+  SSC_1 ~ fSE_0 + SSC_0 + alc_0 + fiSa_0 +
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b 
+  alc_1 ~ fSE_0 + b_SS0_al1*SSC_0 + alc_0 + fiSa_0 +
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b 
+  fSE_1 ~ fSE_0 + b_SS0_fS1*SSC_0 + alc_0 + fiSa_0 +
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b  
+  fiSa_1 ~ fSE_0 + b_SS0_fi1*SSC_0 + alc_0 + fiSa_0 + 
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b 
+  
+  SSC_2 ~ fSE_1 + SSC_1 + alc_1 + fiSa_1 +
+    fSE_0 + SSC_0 + alc_0 + fiSa_0 +
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b 
+  alc_2 ~ b_fS1_al2*fSE_1 + b_SS1_al2*SSC_1 + b_al1_al2*alc_1 + b_fi1_al2*fiSa_1 +
+    fSE_0 + alc_0 + b_SS0_al2*SSC_0 + fiSa_0 + 
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b 
+  fSE_2 ~ b_fS1_fS2*fSE_1 + b_SS1_fS2*SSC_1 + b_al1_fS2*alc_1 + b_fi1_fS2*fiSa_1 + 
+    fSE_0 + b_SS0_fS2*SSC_0 + alc_0 + fiSa_0 +
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b 
+  fiSa_2 ~ b_fS1_fi2*fSE_1 + b_SS1_fi2*SSC_1 + b_al1_fi2*alc_1 + b_fi1_fi2*fiSa_1 + 
+    fSE_0 + b_SS0_fi2*SSC_0 + alc_0 + fiSa_0 +
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b 
+  
+  SSC_3 ~ fSE_2 + SSC_2 + alc_2 + fiSa_2 +
+    fSE_1 + SSC_1 + alc_1 + fiSa_1 +
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b 
+  alc_3 ~ fSE_2 + SSC_2 + alc_2 + fiSa_2 +
+    fSE_1 + SSC_1 + alc_1 + fiSa_1 +
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b 
+  fSE_3 ~ b_fS2_fS3*fSE_2 + b_SS2_fS3*SSC_2 + b_al2_fS3*alc_2 + b_fi2_fS3*fiSa_2 +
+    b_fS1_fS3*fSE_1 + b_SS1_fS3*SSC_1 + b_al1_fS3*alc_1 + b_fi1_fS3*fiSa_1 +
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b 
+  fiSa_3 ~ fSE_2 + SSC_2 + alc_2 + fiSa_2 + 
+    fSE_1 + SSC_1 + alc_1 + fiSa_1 +
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b 
+
+  # Estimate (co)variances at baseline
+  age_b ~~ age_b
+  sex_b ~~ sex_b
+  fNe_b ~~ fNe_b
+  mum_b ~~ mum_b
+  dad_b ~~ dad_b
+  SSC_b ~~ SSC_b
+  fSE_b ~~ fSE_b
+  drug_b ~~ drug_b
+  alc_b ~~ alc_b
+  part_b ~~ part_b
+  fiSa_b ~~ fiSa_b
+  
+  fSE_0 ~~ fSE_0
+  SSC_0 ~~ SSC_0
+  alc_0 ~~ alc_0
+  fiSa_0 ~~ fiSa_0
+   
+  age_b ~~ sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b + fSE_0 + SSC_0 + fiSa_0 + alc_0
+  sex_b ~~ fNe_b + mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b + fSE_0 + SSC_0 + fiSa_0 + alc_0
+  fNe_b ~~ mum_b + dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b + fSE_0 + SSC_0 + fiSa_0 + alc_0
+  mum_b ~~ dad_b + SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b + fSE_0 + SSC_0 + fiSa_0 + alc_0
+  dad_b ~~ SSC_b + fSE_b + drug_b + alc_b + part_b + fiSa_b + fSE_0 + SSC_0 + fiSa_0 + alc_0
+  SSC_b ~~ fSE_b + drug_b + alc_b + part_b + fiSa_b + fSE_0 + SSC_0 + fiSa_0 + alc_0
+  fSE_b ~~ drug_b + alc_b + part_b + fiSa_b + fSE_0 + SSC_0 + fiSa_0 + alc_0
+  drug_b ~~ alc_b + part_b + fiSa_b + fSE_0 + SSC_0 + fiSa_0 + alc_0
+  alc_b ~~ part_b + fiSa_b + fSE_0 + SSC_0 + fiSa_0 + alc_0
+  part_b ~~ fiSa_b + fSE_0 + SSC_0 + fiSa_0 + alc_0
+  fiSa_b ~~ fSE_0 + SSC_0 + fiSa_0 + alc_0
+  
+  fSE_0 ~~ SSC_0 + fiSa_0 + alc_0 
+  SSC_0 ~~ fiSa_0 + alc_0
+  fiSa_0 ~~ alc_0
+  
+  # Estimate residual (co)variances
+  fSE_1 ~~ fSE_1
+  SSC_1 ~~ SSC_1
+  alc_1 ~~ alc_1
+  fiSa_1 ~~ fiSa_1
+  
+  fSE_1 ~~ SSC_1 + alc_1 + fiSa_1
+  SSC_1 ~~ alc_1 + fiSa_1
+  alc_1 ~~ fiSa_1
+  
+  fSE_2 ~~ fSE_2
+  SSC_2 ~~ SSC_2
+  alc_2 ~~ alc_2
+  fiSa_2 ~~ fiSa_2
+  
+  fSE_2 ~~ SSC_2 + alc_2 + fiSa_2
+  SSC_2 ~~ alc_2 + fiSa_2
+  alc_2 ~~ fiSa_2
+
+  fSE_3 ~~ fSE_3
+  SSC_3 ~~ SSC_3
+  alc_3 ~~ alc_3
+  fiSa_3 ~~ fiSa_3
+  
+  fSE_3 ~~ SSC_3 + alc_3 + fiSa_3
+  SSC_3 ~~ alc_3 + fiSa_3
+  alc_3 ~~ fiSa_3
+  
+  # Define joint effects
+  CDE_0 := b_SS0_fS1 * b_fS1_fS2 * b_fS2_fS3 +
+           b_SS0_fS1 * b_fS1_al2 * b_al2_fS3 + 
+           b_SS0_fS1 * b_fS1_fi2 * b_fi2_fS3 +
+           
+           b_SS0_al1 * b_al1_al2 * b_al2_fS3 + 
+           b_SS0_al1 * b_al1_fS2 * b_fS2_fS3 + 
+           b_SS0_al1 * b_al1_fi2 * b_fi2_fS3 +
+           
+           b_SS0_fi1 * b_fi1_fi2 * b_fi2_fS3 +
+           b_SS0_fi1 * b_fi1_al2 * b_al2_fS3 +
+           b_SS0_fi1 * b_fi1_fS2 * b_fS2_fS3 +
+           
+           b_SS0_al1 * b_al1_fS3 +
+           b_SS0_fS1 * b_fS1_fS3 +
+           b_SS0_fi1 * b_fi1_fS3 + 
+           
+           b_SS0_al2 * b_al2_fS3 +
+           b_SS0_fS2 * b_fS2_fS3 +
+           b_SS0_fi2 * b_fi2_fS3 
+  
+  CDE_1 := b_SS1_fS2 * b_fS2_fS3 + 
+           b_SS1_al2 * b_al2_fS3 + 
+           b_SS1_fi2 * b_fi2_fS3 +
+           
+           b_SS1_fS3
+  
+  CDE_2 := b_SS2_fS3
+'
+
+fit_CLPM2_simple <- lavaan(
+  model = m_CLPM2_simple,
+  data = dat_lavaan, 
+  missing = "ML", 
+  meanstructure = TRUE, 
+  int.ov.free = TRUE,
+  se = "bootstrap", 
+  bootstrap = 999,
+  parallel = "snow", 
+  ncpus = 7
+)
+summary(fit_CLPM2_simple)
+inspect(fit_CLPM2_simple, what = "fit")
+parameterEstimates(fit_CLPM2_simple, boot.ci.type = "perc")
+```
+
+:::
+
+# Repeated multiple regression
+In total, we employ six repeated multiple regression analyses, namely repeated multiple regression with:
+
+- lag-1 relationships, adjusting for no covariates (*null set*);
+- lag-1 relationships, adjusting for the simple covariate adjustment set (*simple set*);
+- lag-1 relationships, adjusting for the full covariate adjustment set (*full set*);
+- lag-1 and lag-2 relationships, adjusting for no covariates (*null set, lag-1-2*);
+- lag-1 and lag-2 relationships, adjusting for the simple covariate adjustment set (*simple set, lag-1-2*); and
+- lag-1 and lag-2 relationships, adjusting for the full covariate adjustment set (*full set, lag-1-2*). 
+
+::: {.panel-tabset}
+## *null set*
+
+```{.r}
+fit_CDE2_MRR_null <- glm(
+  formula = fSE_3 ~ SSC_2 + fSE_2 + SSC_b + fSE_b, 
+  data = dat
+)
+boot_CDE2_MRR_null <- car::Boot(fit_CDE2_MRR_null, R = 999)
+boot.ci(boot_CDE2_MRR_null, type = "perc", index = "SSC_2")
+
+fit_CDE1_MRR_null <- glm(
+  formula = fSE_2 ~ SSC_1 + fSE_1 + SSC_2 + SSC_b + fSE_b, 
+    data = dat
+)
+boot_CDE1_MRR_null <- car::Boot(fit_CDE1_MRR_null, R = 999)
+boot.ci(boot_CDE1_MRR_null, type = "perc", index = "SSC_1")
+
+fit_CDE0_MRR_null <- glm(
+  formula = fSE_1 ~ SSC_0 + fSE_0 + SSC_1 + SSC_2 + SSC_b + fSE_b,
+    data = dat
+)
+boot_CDE0_MRR_null <- car::Boot(fit_CDE0_MRR_null, R = 999)
+boot.ci(boot_CDE0_MRR_null, type = "perc", index = "SSC_0")
+
+```
+
+## *simple set*
+
+```{.r}
+fit_CDE2_MRR_simple <- glm(
+  formula = fSE_3 ~ SSC_2 + fSE_2 + factor(alc_2) + fiSa_2 +
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+  data = dat
+)
+boot_CDE2_MRR_simple <- car::Boot(fit_CDE2_MRR_simple, R = 999)
+boot.ci(boot_CDE2_MRR_simple, type = "perc", index = "SSC_2")
+
+fit_CDE1_MRR_simple <- glm(
+  formula = fSE_2 ~ SSC_1 + fSE_1 + factor(alc_1) + fiSa_1 + 
+    SSC_2 + 
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+    data = dat
+)
+boot_CDE1_MRR_simple <- car::Boot(fit_CDE1_MRR_simple, R = 999)
+boot.ci(boot_CDE1_MRR_simple, type = "perc", index = "SSC_1")
+
+fit_CDE0_MRR_simple <- glm(
+  formula = fSE_1 ~ SSC_0 + fSE_0 + factor(alc_0) + fiSa_0 +
+    SSC_1 + SSC_2 + 
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b),
+    data = dat
+)
+boot_CDE0_MRR_simple <- car::Boot(fit_CDE0_MRR_simple, R = 999)
+boot.ci(boot_CDE0_MRR_simple, type = "perc", index = "SSC_0")
+```
+
+## *full set*
+
+```{.r}
+fit_CDE2_MRR_full <- glm(
+  formula = fSE_3 ~ SSC_2 + fSE_2 + factor(alc_2) + fiSa_2 + factor(drug_2) + factor(part_2) +
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+  data = dat
+)
+boot_CDE2_MRR_full <- car::Boot(fit_CDE2_MRR_full, R = 999)
+boot.ci(boot_CDE2_MRR_full, type = "perc", index = "SSC_2")
+
+fit_CDE1_MRR_full <- glm(
+  formula = fSE_2 ~ SSC_1 + fSE_1 + factor(alc_1) + fiSa_1 + factor(drug_1) + factor(part_1) +
+    SSC_2 + 
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+    data = dat
+)
+boot_CDE1_MRR_full <- car::Boot(fit_CDE1_MRR_full, R = 999)
+boot.ci(boot_CDE1_MRR_full, type = "perc", index = "SSC_1")
+
+fit_CDE0_MRR_full <- glm(
+  formula = fSE_1 ~ SSC_0 + fSE_0 + factor(alc_0) + fiSa_0 + factor(drug_0) + factor(part_0) +
+    SSC_1 + SSC_2 + 
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b),
+    data = dat
+)
+boot_CDE0_MRR_full <- car::Boot(fit_CDE0_MRR_full, R = 999)
+boot.ci(boot_CDE0_MRR_full, type = "perc", index = "SSC_0")
+```
+
+## *null set, lag-1-2*
+
+```{.r}
+fit_CDE2_MRR2_null <- glm(
+  formula = fSE_3 ~ SSC_2 + fSE_2 + SSC_1 + fSE_1 + SSC_b + fSE_b, 
+  data = dat
+)
+boot_CDE2_MRR2_null <- car::Boot(fit_CDE2_MRR2_null, R = 999)
+boot.ci(boot_CDE2_MRR2_null, type = "perc", index = "SSC_2")
+
+fit_CDE1_MRR2_null <- glm(
+  formula = fSE_2 ~ SSC_1 + fSE_1 + SSC_0 + fSE_0 + SSC_2 + SSC_b + fSE_b, 
+    data = dat
+)
+boot_CDE1_MRR2_null <- car::Boot(fit_CDE1_MRR2_null, R = 999)
+boot.ci(boot_CDE1_MRR2_null, type = "perc", index = "SSC_1")
+
+fit_CDE0_MRR2_null <- glm(
+  formula = fSE_1 ~ SSC_0 + fSE_0 + SSC_1 + SSC_2 + SSC_b + fSE_b,
+    data = dat
+)
+boot_CDE0_MRR2_null <- car::Boot(fit_CDE0_MRR2_null, R = 999)
+boot.ci(boot_CDE0_MRR2_null, type = "perc", index = "SSC_0")
+```
+
+## *simple set, lag-1-2*
+
+```{.r}
+fit_CDE2_MRR2_simple <- glm(
+  formula = fSE_3 ~ SSC_2 + fSE_2 + factor(alc_2) + fiSa_2 +
+    SSC_1 + fSE_1 + factor(alc_1) + fiSa_1 +
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+  data = dat
+)
+boot_CDE2_MRR2_simple <- car::Boot(fit_CDE2_MRR2_simple, R = 999)
+boot.ci(boot_CDE2_MRR2_simple, type = "perc", index = "SSC_2")
+
+fit_CDE1_MRR2_simple <- glm(
+  formula = fSE_2 ~ SSC_1 + fSE_1 + factor(alc_1) + fiSa_1 + 
+    SSC_2 + 
+    SSC_0 + fSE_0 + factor(alc_0) + fiSa_0 + 
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+    data = dat
+)
+boot_CDE1_MRR2_simple <- car::Boot(fit_CDE1_MRR2_simple, R = 999)
+boot.ci(boot_CDE1_MRR2_simple, type = "perc", index = "SSC_1")
+
+fit_CDE0_MRR2_simple <- glm(
+  formula = fSE_1 ~ SSC_0 + fSE_0 + factor(alc_0) + fiSa_0 +
+    SSC_1 + SSC_2 + 
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b),
+    data = dat
+)
+boot_CDE0_MRR2_simple <- car::Boot(fit_CDE0_MRR2_simple, R = 999)
+boot.ci(boot_CDE0_MRR2_simple, type = "perc", index = "SSC_0")
+```
+
+## *full set, lag-1-2*
+
+```{.r}
+fit_CDE2_MRR2_full <- glm(
+  formula = fSE_3 ~ SSC_2 + fSE_2 + factor(alc_2) + fiSa_2 + factor(drug_2) + factor(part_2) +
+    SSC_1 + fSE_1 + factor(alc_1) + fiSa_1 + factor(drug_1) + factor(part_1) +
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+  data = dat
+)
+boot_CDE2_MRR2_full <- car::Boot(fit_CDE2_MRR2_full, R = 999)
+boot.ci(boot_CDE2_MRR2_full, type = "perc", index = "SSC_2")
+
+fit_CDE1_MRR2_full <- glm(
+  formula = fSE_2 ~ SSC_1 + fSE_1 + factor(alc_1) + fiSa_1 + factor(drug_1) + factor(part_1) +
+    SSC_2 + 
+    SSC_0 + fSE_0 + factor(alc_0) + fiSa_0 + factor(drug_0) + factor(part_0) +
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+    data = dat
+)
+boot_CDE1_MRR2_full <- car::Boot(fit_CDE1_MRR2_full, R = 999)
+boot.ci(boot_CDE1_MRR2_full, type = "perc", index = "SSC_1")
+
+fit_CDE0_MRR2_full <- glm(
+  formula = fSE_1 ~ SSC_0 + fSE_0 + factor(alc_0) + fiSa_0 + factor(drug_0) + factor(part_0) +
+    SSC_1 + SSC_2 + 
+    age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b),
+    data = dat
+)
+boot_CDE0_MRR2_full <- car::Boot(fit_CDE0_MRR2_full, R = 999)
+boot.ci(boot_CDE0_MRR2_full, type = "perc", index = "SSC_0")
+```
+
+:::
+
+# SNMM using G-estimation
+
+In total, we fit six SNMMs, namely SNMMs with:
+
+- lag-1 relationships, adjusting for no covariates (*null set*);
+- lag-1 relationships, adjusting for the simple covariate adjustment set (*simple set*);
+- lag-1 relationships, adjusting for the full covariate adjustment set (*full set*);
+- lag-1 and lag-2 relationships, adjusting for no covariates (*null set, lag-1-2*);
+- lag-1 and lag-2 relationships, adjusting for the simple covariate adjustment set (*simple set, lag-1-2*); and
+- lag-1 and lag-2 relationships, adjusting for the full covariate adjustment set (*full set, lag-1-2*). 
+
+::: {.panel-tabset}
+## *null set*
+
+```{.r}
+# SNMM with G-estimation (wide-format, null set) ----
+bootstrap_SNMM_null <- function(data, i_boot) {
+  
+  # Select bootstrap sample
+  df_boot <- data[i_boot,]
+  
+  # Exposure models
+  fit_PS_SSC2 <- glm(
+    SSC_2 ~ SSC_1 + fSE_1, 
+    data = df_boot
+  )
+
+  fit_PS_SSC1 <- glm(
+    SSC_1 ~ SSC_0 + fSE_0, 
+    data = df_boot
+  )
+  
+  fit_PS_SSC0 <- glm(
+    SSC_0 ~ SSC_b + fSE_b, 
+    data = df_boot
+  )
+    
+  # Calculate predicted exposure
+  df_boot$PS_2 <- predict.glm(fit_PS_SSC2, type = "response")
+  df_boot$PS_1 <- predict.glm(fit_PS_SSC1, type = "response")
+  df_boot$PS_0 <- predict.glm(fit_PS_SSC0, type = "response")
+  
+  # Outcome model using glm() ---- 
+  fit_CDE_fSE3 <- glm( 
+    formula = fSE_3 ~ PS_2 + SSC_2 + fSE_1 + SSC_1, 
+    data = df_boot
+  )
+  df_boot$H_2 <- df_boot$fSE_3 - coef(fit_CDE_fSE3)["SSC_2"] * df_boot$SSC_2 
+  
+  fit_CDE_fSE2 <- glm(
+    formula = H_2 ~ PS_1 + SSC_1 + fSE_0 + fSE_0,
+    data = df_boot
+  )
+  df_boot$H_1 <- df_boot$H_2 - coef(fit_CDE_fSE2)["SSC_1"] * df_boot$SSC_1 
+  
+  fit_CDE_fSE1 <- glm(
+    formula = H_1 ~ PS_0 + SSC_0 + fSE_0,
+    data = df_boot
+  )
+  
+  df_coefs <- c(
+    CDE0 = coef(fit_CDE_fSE1)["SSC_0"],
+    CDE1 = coef(fit_CDE_fSE2)["SSC_1"],
+    CDE2 = coef(fit_CDE_fSE3)["SSC_2"]
+  )
+  
+  return(df_coefs)
+}
+
+# Perform bootstrap
+set.seed(20240221)
+out_boot_null <- boot(dat, bootstrap_SNMM_null, R = 999)
+out_boot_null
+boot.ci(out_boot_null, type = "perc", index = 3)
+
+
+```
+
+## *simple set*
+
+```{.r}
+# SNMM with G-estimation (wide-format, simple adjustment set)----
+bootstrap_SNMM_simple <- function(data, i_boot) {
+  
+  # Select bootstrap sample
+  df_boot <- data[i_boot,]
+  
+  # Exposure models
+  fit_PS_SSC2 <- glm(
+    SSC_2 ~ SSC_1 + fSE_1 + factor(alc_1) + fiSa_1 +
+      age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+    data = df_boot
+  )
+
+  fit_PS_SSC1 <- glm(
+    SSC_1 ~ SSC_0 + fSE_0 + factor(alc_0) + fiSa_0 +
+      age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+    data = df_boot
+  )
+  
+  fit_PS_SSC0 <- glm(
+    SSC_0 ~ age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+    data = df_boot
+  )
+    
+  # Calculate predicted exposure
+  df_boot$PS_2 <- predict.glm(fit_PS_SSC2, type = "response")
+  df_boot$PS_1 <- predict.glm(fit_PS_SSC1, type = "response")
+  df_boot$PS_0 <- predict.glm(fit_PS_SSC0, type = "response")
+  
+  # Outcome model using glm() ---- 
+  fit_CDE_fSE3 <- glm( 
+    formula = fSE_3 ~ PS_2 + SSC_2 + 
+      fSE_1 + factor(alc_1) + fiSa_1 + SSC_1 +
+       age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+    data = df_boot
+  )
+  df_boot$H_2 <- df_boot$fSE_3 - coef(fit_CDE_fSE3)["SSC_2"] * df_boot$SSC_2 
+  
+  fit_CDE_fSE2 <- glm(
+    formula = H_2 ~ PS_1 + SSC_1 + 
+      fSE_0 + factor(alc_0) + fiSa_0 + SSC_0 +
+      age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b),
+    data = df_boot
+  )
+  df_boot$H_1 <- df_boot$H_2 - coef(fit_CDE_fSE2)["SSC_1"] * df_boot$SSC_1 
+  
+  fit_CDE_fSE1 <- glm(
+    formula = H_1 ~ PS_0 + SSC_0 + 
+      age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b),
+    data = df_boot
+  )
+  
+  df_coefs <- c(
+    CDE0 = coef(fit_CDE_fSE1)["SSC_0"],
+    CDE1 = coef(fit_CDE_fSE2)["SSC_1"],
+    CDE2 = coef(fit_CDE_fSE3)["SSC_2"]
+  )
+  
+  return(df_coefs)
+}
+
+# Perform bootstrap
+set.seed(20240221)
+out_boot_simple <- boot(dat, bootstrap_SNMM_simple, R = 999)
+out_boot_simple
+boot.ci(out_boot_simple, type = "perc", index = 3)
+
+```
+
+## *full set*
+
+```{.r}
+# SNMM with G-estimation (wide-format, full adjustment set) ----
+bootstrap_SNMM_full <- function(data, i_boot) {
+  
+  # Select bootstrap sample
+  df_boot <- data[i_boot,]
+  
+  # Exposure models
+  fit_PS_SSC2 <- glm(
+    SSC_2 ~ SSC_1 + fSE_1 + factor(drug_1) + factor(alc_1) + factor(part_1) + fiSa_1 +
+      age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+    data = df_boot
+  )
+
+  fit_PS_SSC1 <- glm(
+    SSC_1 ~ SSC_0 + fSE_0 + factor(drug_0) + factor(alc_0) + factor(part_0) + fiSa_0 +
+      age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+    data = df_boot
+  )
+  
+  fit_PS_SSC0 <- glm(
+    SSC_0 ~ age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+    data = df_boot
+  )
+    
+  # Calculate predicted exposure
+  df_boot$PS_2 <- predict.glm(fit_PS_SSC2, type = "response")
+  df_boot$PS_1 <- predict.glm(fit_PS_SSC1, type = "response")
+  df_boot$PS_0 <- predict.glm(fit_PS_SSC0, type = "response")
+  
+  # Outcome model using glm() 
+  fit_CDE_fSE3 <- glm( 
+    formula = fSE_3 ~ PS_2 + SSC_2 + 
+      fSE_1 + factor(alc_1) + factor(drug_1) + factor(part_1) + fiSa_1 + SSC_1 +
+       age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+    data = df_boot
+  )
+  df_boot$H_2 <- df_boot$fSE_3 - coef(fit_CDE_fSE3)["SSC_2"] * df_boot$SSC_2 
+  
+  fit_CDE_fSE2 <- glm(
+    formula = H_2 ~ PS_1 + SSC_1 + 
+      fSE_0 + factor(alc_0) + factor(drug_0) + factor(part_0) + fiSa_0 + SSC_0 +
+      age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b),
+    data = df_boot
+  )
+  df_boot$H_1 <- df_boot$H_2 - coef(fit_CDE_fSE2)["SSC_1"] * df_boot$SSC_1 
+  
+  fit_CDE_fSE1 <- glm(
+    formula = H_1 ~ PS_0 + SSC_0 + 
+      age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b),
+    data = df_boot
+  )
+  
+  df_coefs <- c(
+    CDE0 = coef(fit_CDE_fSE1)["SSC_0"],
+    CDE1 = coef(fit_CDE_fSE2)["SSC_1"],
+    CDE2 = coef(fit_CDE_fSE3)["SSC_2"]
+  )
+  
+  return(df_coefs)
+}
+
+# Perform bootstrap
+set.seed(20240221)
+out_boot_full <- boot(dat, bootstrap_SNMM_full, R = 999)
+out_boot_full
+boot.ci(out_boot_full, type = "perc", index = 3)
+
+```
+
+## *null set, lag-1-2*
+
+```{.r}
+# SNMM with G-estimation (lag-1 and lag-2, null set) ----
+bootstrap_SNMM2_null <- function(data, i_boot) {
+  
+  # Select bootstrap sample
+  df_boot <- data[i_boot,]
+  
+  # Exposure models
+  fit_PS_SSC2 <- glm(
+    SSC_2 ~ SSC_1 + fSE_1 + SSC_0 + fSE_0, 
+    data = df_boot
+  )
+
+  fit_PS_SSC1 <- glm(
+    SSC_1 ~ SSC_0 + fSE_0 + SSC_b + fSE_b, 
+    data = df_boot
+  )
+  
+  fit_PS_SSC0 <- glm(
+    SSC_0 ~ SSC_b + fSE_b,
+    data = df_boot
+  )
+    
+  # Calculate predicted exposure
+  df_boot$PS_2 <- predict.glm(fit_PS_SSC2, type = "response")
+  df_boot$PS_1 <- predict.glm(fit_PS_SSC1, type = "response")
+  df_boot$PS_0 <- predict.glm(fit_PS_SSC0, type = "response")
+  
+  # Outcome model using glm() ---- 
+  fit_CDE_fSE3 <- glm( 
+    formula = fSE_3 ~ PS_2 + SSC_2 + fSE_1 + SSC_1 + fSE_0 + SSC_0, 
+    data = df_boot
+  )
+  df_boot$H_2 <- df_boot$fSE_3 - coef(fit_CDE_fSE3)["SSC_2"] * df_boot$SSC_2 
+  
+  fit_CDE_fSE2 <- glm(
+    formula = H_2 ~ PS_1 + SSC_1 + fSE_0 + SSC_0 + SSC_b + fSE_b, 
+    data = df_boot
+  )
+  df_boot$H_1 <- df_boot$H_2 - coef(fit_CDE_fSE2)["SSC_1"] * df_boot$SSC_1 
+  
+  fit_CDE_fSE1 <- glm(
+    formula = H_1 ~ PS_0 + SSC_0 + fSE_b + SSC_b,
+    data = df_boot
+  )
+  
+  df_coefs <- c(
+    CDE0 = coef(fit_CDE_fSE1)["SSC_0"],
+    CDE1 = coef(fit_CDE_fSE2)["SSC_1"],
+    CDE2 = coef(fit_CDE_fSE3)["SSC_2"]
+  )
+  
+  return(df_coefs)
+}
+
+# Perform bootstrap
+set.seed(20240221)
+out_boot2_null <- boot(dat, bootstrap_SNMM2_null, R = 999)
+out_boot2_null
+boot.ci(out_boot2_null, type = "perc", index = 3)
+```
+
+## *simple set, lag-1-2*
+
+```{.r}
+# SNMM with G-estimation (lag-1 and lag-2, simple set) ----
+bootstrap_SNMM2_simple <- function(data, i_boot) {
+  
+  # Select bootstrap sample
+  df_boot <- data[i_boot,]
+  
+  # Exposure models
+  fit_PS_SSC2 <- glm(
+    SSC_2 ~ SSC_1 + fSE_1 + factor(alc_1) + fiSa_1 +
+      SSC_0 + fSE_0 + factor(alc_0) + factor(drug_0) + factor(part_0) + fiSa_0 + 
+      age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+    data = df_boot
+  )
+
+  fit_PS_SSC1 <- glm(
+    SSC_1 ~ SSC_0 + fSE_0 + factor(alc_0) + fiSa_0 + 
+      age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+    data = df_boot
+  )
+  
+  fit_PS_SSC0 <- glm(
+    SSC_0 ~ age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b),
+    data = df_boot
+  )
+    
+  # Calculate predicted exposure
+  df_boot$PS_2 <- predict.glm(fit_PS_SSC2, type = "response")
+  df_boot$PS_1 <- predict.glm(fit_PS_SSC1, type = "response")
+  df_boot$PS_0 <- predict.glm(fit_PS_SSC0, type = "response")
+  
+  # Outcome model using glm() ---- 
+  fit_CDE_fSE3 <- glm( 
+    formula = fSE_3 ~ PS_2 + SSC_2 + 
+      SSC_1 + factor(alc_1) + fiSa_1 + fSE_1 + 
+      SSC_0 + fSE_0 + factor(alc_0) + fiSa_0 +
+      age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+    data = df_boot
+  )
+  df_boot$H_2 <- df_boot$fSE_3 - coef(fit_CDE_fSE3)["SSC_2"] * df_boot$SSC_2 
+  
+  fit_CDE_fSE2 <- glm(
+    formula = H_2 ~ PS_1 + SSC_1 + 
+      SSC_0 + factor(alc_0) + fiSa_0 + 
+      age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+    data = df_boot
+  )
+  df_boot$H_1 <- df_boot$H_2 - coef(fit_CDE_fSE2)["SSC_1"] * df_boot$SSC_1 
+  
+  fit_CDE_fSE1 <- glm(
+    formula = H_1 ~ PS_0 + SSC_0 + 
+      age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b),
+    data = df_boot
+  )
+  
+  df_coefs <- c(
+    CDE0 = coef(fit_CDE_fSE1)["SSC_0"],
+    CDE1 = coef(fit_CDE_fSE2)["SSC_1"],
+    CDE2 = coef(fit_CDE_fSE3)["SSC_2"]
+  )
+  
+  return(df_coefs)
+}
+
+# Perform bootstrap
+set.seed(20240221)
+out_boot2_simple <- boot(dat, bootstrap_SNMM2_simple, R = 999)
+out_boot2_simple
+boot.ci(out_boot2_simple, type = "perc", index = 3)
+```
+
+## *full set, lag-1-2*
+
+```{.r}
+# SNMM with G-estimation (lag-1 and lag-2, full adjustment set)----
+bootstrap_SNMM2_full <- function(data, i_boot) {
+  
+  # Select bootstrap sample
+  df_boot <- data[i_boot,]
+  
+  # Exposure models
+  fit_PS_SSC2 <- glm(
+    SSC_2 ~ SSC_1 + fSE_1 + factor(drug_1) + factor(alc_1) + factor(part_1) + fiSa_1 +
+      SSC_0 + fSE_0 + factor(alc_0) + factor(drug_0) + factor(part_0) + fiSa_0 + 
+      age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+    data = df_boot
+  )
+
+  fit_PS_SSC1 <- glm(
+    SSC_1 ~ SSC_0 + fSE_0 + factor(drug_0) + factor(alc_0) + factor(part_0) + fiSa_0 + 
+      age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+    data = df_boot
+  )
+  
+  fit_PS_SSC0 <- glm(
+    SSC_0 ~ age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b),
+    data = df_boot
+  )
+    
+  # Calculate predicted exposure
+  df_boot$PS_2 <- predict.glm(fit_PS_SSC2, type = "response")
+  df_boot$PS_1 <- predict.glm(fit_PS_SSC1, type = "response")
+  df_boot$PS_0 <- predict.glm(fit_PS_SSC0, type = "response")
+  
+  # Outcome model using glm() ---- 
+  fit_CDE_fSE3 <- glm( 
+    formula = fSE_3 ~ PS_2 + SSC_2 + 
+      SSC_1 + factor(alc_1) + factor(drug_1) + factor(part_1) + fiSa_1 + fSE_1 + 
+      SSC_0 + factor(alc_0) + factor(drug_0) + factor(part_0) + fiSa_0 + fSE_0 + 
+      age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+    data = df_boot
+  )
+  df_boot$H_2 <- df_boot$fSE_3 - coef(fit_CDE_fSE3)["SSC_2"] * df_boot$SSC_2 
+  
+  fit_CDE_fSE2 <- glm(
+    formula = H_2 ~ PS_1 + SSC_1 + 
+      SSC_0 + factor(alc_0) + factor(drug_0) + factor(part_0) + fiSa_0 + 
+      age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b), 
+    data = df_boot
+  )
+  df_boot$H_1 <- df_boot$H_2 - coef(fit_CDE_fSE2)["SSC_1"] * df_boot$SSC_1 
+  
+  fit_CDE_fSE1 <- glm(
+    formula = H_1 ~ PS_0 + SSC_0 + 
+      age_b + sex_b + fNe_b + mum_b + dad_b + SSC_b + fSE_b + factor(drug_b) + factor(alc_b) + factor(part_b) + factor(fiSa_b),
+    data = df_boot
+  )
+  
+  df_coefs <- c(
+    CDE0 = coef(fit_CDE_fSE1)["SSC_0"],
+    CDE1 = coef(fit_CDE_fSE2)["SSC_1"],
+    CDE2 = coef(fit_CDE_fSE3)["SSC_2"]
+  )
+  
+  return(df_coefs)
+}
+
+# Perform bootstrap
+set.seed(20240221)
+out_boot2_full <- boot(dat, bootstrap_SNMM2_full, R = 999)
+out_boot2_full
+boot.ci(out_boot2_full, type = "perc", index = 3)
+
+```
+
+:::
+
+# References

@@ -1,0 +1,9 @@
+---
+title: "Frequently Asked Questions"
+output: 
+  html_document:
+    toc:  true
+    toc_float: true
+---
+
+Below you can find a list of frequently asked questions, organized by topic, that reach us via email. Click the question to see our response.

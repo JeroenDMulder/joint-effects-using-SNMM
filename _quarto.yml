@@ -1,0 +1,32 @@
+project:
+  type: website
+
+website:
+  title: "Mulder, Usami, Hamaker (2024)"
+  description: "Online supplementary material of Mulder, Usami, and Hamaker (2024)."
+  site-url: "https://jeroendmulder.github.io/joint-effects-using-SNMM"
+  
+  navbar:
+    background: primary
+    search: true
+    page-navigation: true
+    repo-url: https://github.com/JeroenDMulder/joint-effects-using-SNMM
+    repo-actions: [issue]
+    left:
+      - href: index.qmd
+        text: "Home"
+      - href: empirical-example.qmd
+        text: "Empirical example"
+      - href: test.qmd
+        text: "Simulation"
+      - href: faq.qmd
+        text: "FAQ"
+
+format:
+  html:
+    theme: flatly
+    css: styles.css
+    toc: true
+
+
+
